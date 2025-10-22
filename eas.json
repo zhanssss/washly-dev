@@ -1,7 +1,11 @@
 {
   "cli": { "version": ">= 8.0.0" },
   "build": {
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "node": "20.11.1"
+    },
     "production": {
       "distribution": "store",
       "android": { "buildType": "app-bundle" },
