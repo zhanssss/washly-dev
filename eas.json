@@ -6,6 +6,11 @@
       "distribution": "store",
       "android": { "buildType": "app-bundle" },
       "ios": { "image": "latest" }
+    },
+    "development": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "channel": "development"
     }
   },
   "submit": {
