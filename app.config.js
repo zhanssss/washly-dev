@@ -36,7 +36,6 @@ const base = {
         permissions: [
             "android.permission.CAMERA",
             "android.permission.ACCESS_FINE_LOCATION",
-            "android.permission.RECORD_AUDIO",
         ],
     },
     web: { favicon: "./assets/images/favicon.png" },

@@ -137,6 +137,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
     }, []);
 
+
+    const [pwResetDebugCode, setPwResetDebugCode] = useState<string | null>(null);
+    const [pwResetVerifiedCode, setPwResetVerifiedCode] = useState<string | null>(null);
+    const [pwResetToken, setPwResetToken] = useState<string | null>(null);
+    const [pwResetTTL, setPwResetTTL] = useState<number | null>(null); // minutes
+
+
+
     useEffect(() => {
         loadAuth();
     }, [loadAuth]);
@@ -665,40 +673,55 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
     }, [userType, saveTokens, clearTokens]);
 
-    // Сброс пароля
+// 1) REQUEST: POST /api/carwash/password/reset/request/
     const sendPasswordResetCode = useCallback(async (phone: string) => {
         try {
-            const response = await api.post('/auth/password/send-code', {phone});
-            return {success: response.data.success, error: response.data.error};
-        } catch (error) {
-            console.log('Error sending password reset code:', error);
-            return {success: false, error: 'Ошибка отправки кода'};
+            const res = await api.post('/carwash/password/reset/request/', { phone });
+            // backend returns { message, debug_code }
+            return {
+                success: true,
+                message: res?.data?.message ?? '',
+                debug: res?.data?.debug_code ?? '',
+            };
+        } catch (e: any) {
+            return { success: false, error: e?.response?.data?.detail || 'Ошибка отправки кода' };
         }
     }, []);
 
+// 2) VERIFY: POST /api/carwash/password/reset/verify/
     const verifyPasswordResetCode = useCallback(async (phone: string, code: string) => {
         try {
-            const response = await api.post('/auth/password/verify-code', {phone, code});
-            return {success: response.data.success, error: response.data.error};
-        } catch (error) {
-            console.log('Error verifying password reset code:', error);
-            return {success: false, error: 'Ошибка проверки кода'};
+            const res = await api.post('/carwash/password/reset/verify/', { phone, code });
+            // { reset_token, ttl_minutes }
+            const token = res?.data?.reset_token || null;
+            const ttl = Number(res?.data?.ttl_minutes ?? 0) || null;
+            if (!token) return { success: false, error: 'Токен не получен' };
+            setPwResetToken(token);
+            setPwResetTTL(ttl);
+            return { success: true, reset_token: token, ttl_minutes: ttl };
+        } catch (e: any) {
+            return { success: false, error: e?.response?.data?.detail || 'Неверный код' };
         }
     }, []);
 
-    const resetPassword = useCallback(async (phone: string, newPassword: string) => {
+// 3) COMPLETE: POST /api/carwash/password/reset/complete/
+    const resetPassword = useCallback(async (_phone: string, newPassword: string) => {
+        if (!pwResetToken) return { success: false, error: 'Нет reset_token. Сначала подтвердите код.' };
         try {
-            const response = await api.post('/auth/password/reset', {phone, newPassword});
-            if (!response.data.success) return {success: false, error: response.data.error || 'Ошибка сброса пароля'};
-            const updatedUser = response.data.user as User;
-            setUser(updatedUser);
-            await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-            return {success: true, user: updatedUser};
-        } catch (error) {
-            console.log('Error resetting password:', error);
-            return {success: false, error: 'Ошибка сброса пароля'};
+            const res = await api.post('/carwash/password/reset/complete/', {
+                reset_token: pwResetToken,
+                new_password: newPassword,
+                confirm_password: newPassword,
+            });
+            // cleanup
+            setPwResetToken(null);
+            setPwResetTTL(null);
+            return { success: true, message: res?.data?.message || 'Пароль сброшен' };
+        } catch (e: any) {
+            return { success: false, error: e?.response?.data?.detail || 'Не удалось изменить пароль' };
         }
-    }, []);
+    }, [pwResetToken]);
+
 
     const logout = useCallback(async () => {
         try {
