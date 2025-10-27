@@ -9,6 +9,7 @@ const base = {
     scheme: "washly",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    checkAutomatically: "ON_LOAD",
     splash: {
         image: "./assets/images/splash-icon.png",
         resizeMode: "contain",
@@ -24,6 +25,7 @@ const base = {
             NSLocationWhenInUseUsageDescription:
                 "Нужно, чтобы показывать ближайшие автомойки и строить маршрут.",
         },
+        flipper: true,
     },
     android: {
         versionCode: 1,

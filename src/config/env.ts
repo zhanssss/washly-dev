@@ -7,6 +7,5 @@ const required = (name: string) => {
 
 const stripTrailingSlash = (u: string) => u.replace(/\/+$/, "");
 
-// export const API_BASE_URL = stripTrailingSlash(required("EXPO_PUBLIC_RORK_API_BASE_URL_ENV"));
-export const API_BASE_URL = (process.env.EXPO_PUBLIC_RORK_API_BASE_URL?? "").trim()
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL?? "").trim()
 export const GIS_API_KEY = (process.env.EXPO_PUBLIC_2GIS_API_KEY ?? "").trim();

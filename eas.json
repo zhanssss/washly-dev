@@ -1,26 +1,43 @@
 {
-  "cli": { "version": ">= 8.0.0" },
+  "cli": {
+    "version": ">= 8.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "channel": "preview"
     },
     "production": {
       "distribution": "store",
-      "android": { "buildType": "app-bundle" },
-      "ios": { "image": "latest" },
-      "channel": "production"
+      "android": {
+        "buildType": "app-bundle",
+        "autoIncrement": "versionCode"
+      },
+      "ios": {
+        "image": "latest",
+        "autoIncrement": "buildNumber"
+      },
+      "channel": "production",
+      "autoIncrement": true
     },
     "development": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "android": {
+        "buildType": "apk"
+      },
       "channel": "development"
     }
   },
   "submit": {
     "production": {
-      "android": { "track": "internal" }
+      "android": {
+        "serviceAccountKeyPath": "./ServiceAccountWashly.json",
+        "track": "internal"
+      }
     }
   }
 }
