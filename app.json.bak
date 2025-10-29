@@ -3,7 +3,7 @@
     "name": "Washly Car Wash App",
     "owner": "washly",
     "slug": "washly-car-wash-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "washly",
@@ -19,8 +19,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.washly.carwash",
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
-        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
+        "NSCameraUsageDescription": "Allow Washly to access your camera",
+        "NSPhotoLibraryUsageDescription": "Allow Washly to access your photos",
         "NSLocationWhenInUseUsageDescription": "Нужно, чтобы показывать ближайшие автомойки и строить маршрут."
       }
     },

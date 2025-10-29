@@ -1,15 +1,12 @@
 // components/contexts/AuthContext.tsx
-
-
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useState, useEffect, useCallback, useMemo} from 'react';
 import {router} from 'expo-router';
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
-import {Platform} from 'react-native';
 import { useAuthStore } from '@/src/stores/authStore';
 import { API_BASE_URL } from '@/src/config/env';
+import { saveRefreshToken, loadRefreshToken, clearRefreshToken, getJwtExp, isExpiring } from '@/src/auth/token';
 
 export interface CarDetails {
     ownerName: string;
@@ -65,13 +62,23 @@ const REFRESH_URL = `${API_BASE_URL}/api/auth/token/refresh/`;
 const CLIENT_ME_URL = '/client/me/';
 const WASHER_ME_URL = '/washer/me/';
 
+// Access держим в памяти процесса:
+let accessInMemory: string | null = null;
+let accessExpMs: number | null = null;
+function setAccess(token: string | null) {
+    accessInMemory = token;
+    if (token) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        accessExpMs = getJwtExp(token);
+    } else {
+        delete api.defaults.headers.common['Authorization'];
+        accessExpMs = null;
+    }
+}
 
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
     const [user, setUser] = useState<User | null>(null);
-    const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [refreshToken, setRefreshToken] = useState<string | null>(null);
-
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [pendingPhone, setPendingPhone] = useState<string>('');
     const [userType, setUserType] = useState<'car-owner' | 'car-wash'>('car-owner');
@@ -112,294 +119,121 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setTempPassword(password);
     }, []);
 
-    const loadAuth = useCallback(async () => {
-        try {
-            const [acc, refFromSecure, refFromAsync, userData] = await Promise.all([
-                AsyncStorage.getItem('accessToken'),
-                // Web-guard: SecureStore на web может быть no-op
-                Platform.OS !== 'web' ? SecureStore.getItemAsync('refreshToken') : Promise.resolve(null),
-                AsyncStorage.getItem('refreshToken'),
-                AsyncStorage.getItem('user'),
-            ]);
-
-            const ref = refFromSecure ?? refFromAsync;
-
-            if (acc) {
-                setAccessToken(acc);
-                api.defaults.headers.common['Authorization'] = `Bearer ${acc}`;
-            }
-            if (ref) setRefreshToken(ref);
-            if (userData) setUser(JSON.parse(userData));
-        } catch (e) {
-            console.log('Error loading auth:', e);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-
     const [pwResetDebugCode, setPwResetDebugCode] = useState<string | null>(null);
     const [pwResetVerifiedCode, setPwResetVerifiedCode] = useState<string | null>(null);
     const [pwResetToken, setPwResetToken] = useState<string | null>(null);
     const [pwResetTTL, setPwResetTTL] = useState<number | null>(null); // minutes
 
 
-
     useEffect(() => {
-        loadAuth();
-    }, [loadAuth]);
+        let mounted = true;
+        (async () => {
+            try {
+                const r = await loadRefreshToken();
+                if (!r) return; // нет refresh — останемся на экранах входа
+
+                // Получим свежий access в память:
+                await ensureFreshAccess();
+
+                // Подтянем профиль: сначала клиент, потом автомойка (или наоборот — по продуктовой логике)
+                try {
+                    const me = await api.get(CLIENT_ME_URL);
+                    const mapped = mapOwnerMeToUser(me.data);
+                    if (mounted) {
+                        setUser(mapped);
+                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    }
+                } catch {
+                    const me = await api.get(WASHER_ME_URL);
+                    const mapped = mapWasherMeToUser(me.data);
+                    if (mounted) {
+                        setUser(mapped);
+                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    }
+                }
+            } finally {
+                if (mounted) setIsLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
 
 
     const saveTokens = useCallback(async (access?: string | null, refresh?: string | null) => {
-        console.log('[AUTH] saveTokens called', {hasAccess: !!access, hasRefresh: !!refresh});
-        const store = useAuthStore.getState();
-
-        if (access) {
-            console.log('[AUTH] access token (first 24):', access.slice(0, 24));
-            setAccessToken(access);
-            api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-            await AsyncStorage.setItem('accessToken', access);
-            store.setAuth({ accessToken: access }); // 👈 в zustand
-        }
-
-        if (refresh) {
-            setRefreshToken(refresh);
-            store.setAuth({ refreshToken: refresh }); // 👈 в zustand
-            try {
-                if (Platform.OS !== 'web') {
-                    await SecureStore.setItemAsync('refreshToken', refresh);
-                } else {
-                    await AsyncStorage.setItem('refreshToken', refresh);
-                }
-            } catch (e) {
-                await AsyncStorage.setItem('refreshToken', refresh);
-            }
-        }
+        if (access) setAccess(access);
+        if (refresh) await saveRefreshToken(refresh);
     }, []);
 
     const clearTokens = useCallback(async () => {
-        const store = useAuthStore.getState();
-        setAccessToken(null);
-        setRefreshToken(null);
-        store.setAuth({ accessToken: null, refreshToken: null }); // 👈 очистка в zustand
-
-        delete api.defaults.headers.common['Authorization'];
-        await AsyncStorage.removeItem('accessToken');
-
-        try {
-            if (Platform.OS !== 'web') {
-                await SecureStore.deleteItemAsync('refreshToken');
-            }
-        } catch {}
-        await AsyncStorage.removeItem('refreshToken');
+        setAccess(null);
+        await clearRefreshToken();
     }, []);
 
 
-    // всегда подставляем актуальный access в запросы
+
+    let refreshPromise: Promise<string> | null = null;
+
+    async function ensureFreshAccess(): Promise<string> {
+        if (accessInMemory && !isExpiring(accessExpMs)) return accessInMemory;
+
+        const storedRefresh = await loadRefreshToken();
+        if (!storedRefresh) throw new Error('No refresh');
+
+        if (!refreshPromise) {
+            refreshPromise = axios.post(REFRESH_URL, { refresh: storedRefresh })
+                .then(async (resp) => {
+                    const newAccess  = resp.data?.access;
+                    const newRefresh = resp.data?.refresh; // если бэк ротирует refresh
+                    if (!newAccess) throw new Error('No access from refresh');
+                    await saveTokens(newAccess, newRefresh ?? null);
+                    return newAccess as string;
+                })
+                .finally(() => { refreshPromise = null; });
+        }
+        return await refreshPromise!;
+    }
+
     useEffect(() => {
-        const reqId = api.interceptors.request.use((config) => {
-            if (accessToken) {
-                config.headers = config.headers ?? {};
-                config.headers.Authorization = `Bearer ${accessToken}`;
+        const reqId = api.interceptors.request.use(async (cfg) => {
+            try {
+                if (!accessInMemory || isExpiring(accessExpMs)) {
+                    const t = await ensureFreshAccess();
+                    cfg.headers = cfg.headers ?? {};
+                    (cfg.headers as any).Authorization = `Bearer ${t}`;
+                }
+            } catch {
+                // пустим как есть — 401 поймает response interceptor
             }
-            return config;
+            return cfg;
         });
-        return () => {
-            api.interceptors.request.eject(reqId);
-        };
-    }, [accessToken]);
-
-// общий авто-рефреш по 401
-    useEffect(() => {
-        let isRefreshing = false;
-        let queue: Array<(t: string) => void> = [];
-
-        const onRefreshed = (t: string) => {
-            queue.forEach(cb => cb(t));
-            queue = [];
-        };
-        const addToQueue = (cb: (t: string) => void) => queue.push(cb);
 
         const respId = api.interceptors.response.use(
-            (r) => r,
+            r => r,
             async (error) => {
-                const originalRequest = error?.config ?? {};
-
-                if (error?.response?.status !== 401 || (originalRequest as any)._retry) {
-                    return Promise.reject(error);
-                }
-                (originalRequest as any)._retry = true;
-
-                if (isRefreshing) {
-                    return new Promise(resolve => {
-                        addToQueue((newAccess) => {
-                            (originalRequest as any).headers = (originalRequest as any).headers ?? {};
-                            (originalRequest as any).headers.Authorization = `Bearer ${newAccess}`;
-                            resolve(api(originalRequest));
-                        });
-                    });
-                }
-
-                isRefreshing = true;
+                const original = error?.config ?? {};
+                if (error?.response?.status !== 401 || (original as any)._retried) throw error;
+                (original as any)._retried = true;
                 try {
-                    const storedRefresh = Platform.OS !== 'web'
-                        ? await SecureStore.getItemAsync('refreshToken')
-                        : await AsyncStorage.getItem('refreshToken');
-
-                    if (!storedRefresh) throw new Error('No refresh token');
-
-                    // ⚡️ Запрашиваем новый токен
-                    const resp = await axios.post(REFRESH_URL, { refresh: storedRefresh });
-
-                    const newAccess = resp.data?.access;
-                    const newRefresh = resp.data?.refresh;
-
-                    if (!newAccess) throw new Error('No access token from refresh');
-
-                    // сохраняем оба если пришли
-                    await saveTokens(newAccess, newRefresh ?? null);
-
-                    onRefreshed(newAccess);
-
-                    (originalRequest as any).headers = (originalRequest as any).headers ?? {};
-                    (originalRequest as any).headers.Authorization = `Bearer ${newAccess}`;
-
-                    return api(originalRequest);
+                    const t = await ensureFreshAccess();
+                    (original as any).headers = (original as any).headers ?? {};
+                    (original as any).headers.Authorization = `Bearer ${t}`;
+                    return api(original);
                 } catch (e) {
                     await clearTokens();
                     setUser(null);
                     await AsyncStorage.removeItem('user');
                     router.replace('/');
-                    return Promise.reject(e);
-                } finally {
-                    isRefreshing = false;
+                    throw e;
                 }
             }
         );
 
         return () => {
+            api.interceptors.request.eject(reqId);
             api.interceptors.response.eject(respId);
         };
-    }, [saveTokens, clearTokens, setUser]);
-
-    useEffect(() => {
-        // базовый адрес твоего API (тот же, что у axios: baseURL)
-        const API_ORIGIN = API_BASE_URL;
-
-        let isRefreshing = false;
-        let waiters: Array<(t: string | null) => void> = [];
-        const notify = (t: string | null) => { waiters.forEach(cb => cb(t)); waiters = []; };
-
-        const getAccess = async () =>
-            useAuthStore.getState().accessToken ?? (await AsyncStorage.getItem('accessToken'));
-
-        const getRefresh = async () => {
-            const inStore = useAuthStore.getState().refreshToken;
-            if (inStore) return inStore;
-            try {
-                // на web SecureStore может быть no-op
-                const secure = Platform.OS !== 'web' ? await SecureStore.getItemAsync('refreshToken') : null;
-                return secure ?? (await AsyncStorage.getItem('refreshToken'));
-            } catch {
-                return await AsyncStorage.getItem('refreshToken');
-            }
-        };
-
-        const saveTokensSilent = async (access?: string | null, refresh?: string | null) => {
-            const store = useAuthStore.getState();
-            if (access) {
-                store.setAuth({ accessToken: access });
-                await AsyncStorage.setItem('accessToken', access);
-                // заодно обновим axios, чтобы следующие axios-запросы тоже были с новым токеном
-                (api.defaults.headers as any).common = {
-                    ...(api.defaults.headers?.common || {}),
-                    Authorization: `Bearer ${access}`,
-                };
-            }
-            if (refresh) {
-                store.setAuth({ refreshToken: refresh });
-                try {
-                    if (Platform.OS !== 'web') await SecureStore.setItemAsync('refreshToken', refresh);
-                    else await AsyncStorage.setItem('refreshToken', refresh);
-                } catch {
-                    await AsyncStorage.setItem('refreshToken', refresh);
-                }
-            }
-        };
-
-        const originalFetch = global.fetch;
-
-        global.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-            const urlStr = typeof input === 'string' ? input : input.toString();
-
-            // Подставляем Authorization только для запросов к нашему API
-            const isApiCall =
-                urlStr.startsWith(API_ORIGIN + '/api') || urlStr.startsWith(API_ORIGIN + '/driver') || urlStr.startsWith(API_ORIGIN + '/dashboard');
-
-            // Не перехватываем сам refresh/login и OTP
-            const isAuthEndpoint =
-                urlStr.includes('/api/auth/token/refresh/') ||
-                urlStr.includes('/api/auth/token/') ||
-                urlStr.includes('/api/auth/otp/');
-
-            let headers = new Headers(init.headers as any);
-
-            if (isApiCall && !isAuthEndpoint && !headers.has('Authorization')) {
-                const acc = await getAccess();
-                if (acc) headers.set('Authorization', `Bearer ${acc}`);
-            }
-
-            // Первая попытка
-            let response = await originalFetch(input, { ...init, headers });
-            if (!isApiCall || isAuthEndpoint || response.status !== 401) return response;
-
-            // === 401 на нашем API: пытаемся обновить токен и повторить ===
-            // Если уже идет refresh — ждём
-            if (isRefreshing) {
-                await new Promise<void>(resolve => waiters.push(() => resolve()));
-                // после refresh пробуем ещё раз с новым токеном
-                const acc2 = await getAccess();
-                const headersRetry = new Headers(init.headers as any);
-                if (acc2) headersRetry.set('Authorization', `Bearer ${acc2}`);
-                return originalFetch(input, { ...init, headers: headersRetry });
-            }
-
-            isRefreshing = true;
-            try {
-                const refresh = await getRefresh();
-                if (!refresh) return response; // нечем обновиться → отдадим 401 как есть
-
-                const refreshResp = await axios.post(REFRESH_URL, { refresh });
-                const newAccess = refreshResp.data?.access;
-                const newRefresh = refreshResp.data?.refresh;
-
-                if (!newAccess) return response;
-
-                await saveTokensSilent(newAccess, newRefresh ?? undefined);
-                notify(newAccess);
-
-                const headersRetry = new Headers(init.headers as any);
-                headersRetry.set('Authorization', `Bearer ${newAccess}`);
-                return originalFetch(input, { ...init, headers: headersRetry });
-            } catch (e: any) {
-                // ВАЖНО: не разлогиниваем на сетевой ошибке refresh.
-                // Разлогин допустим только если сам refresh вернул 401/403
-                const st = e?.response?.status ?? e?.status;
-                if (st === 401 || st === 403) {
-                    // здесь можешь вызвать clearTokens() и редирект, если хочешь
-                    // await clearTokens(); router.replace('/');
-                }
-                notify(null);
-                return response; // вернём исходный 401
-            } finally {
-                isRefreshing = false;
-            }
-        };
-
-        return () => {
-            global.fetch = originalFetch; // на размонтирование (hot reload и т.п.)
-        };
-    }, []);
+    }, [saveTokens, clearTokens]);
 
 
 
@@ -452,7 +286,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const meResp = await api.get(CLIENT_ME_URL);
                 const mapped = mapOwnerMeToUser(meResp.data);
                 setUser(mapped);
-                useAuthStore.getState().setAuth({ user: mapped });
                 await AsyncStorage.setItem('user', JSON.stringify(mapped));
                 setAuthStep('complete');
                 setPendingPhone('');
@@ -461,7 +294,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const meResp = await api.get(WASHER_ME_URL);
                 const mapped = mapWasherMeToUser(meResp.data);
                 setUser(mapped);
-                useAuthStore.getState().setAuth({ user: mapped });
                 await AsyncStorage.setItem('user', JSON.stringify(mapped));
                 setAuthStep('complete');
                 setPendingPhone('');
@@ -569,7 +401,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             const meResp = await api.get('/client/me/'); // Authorization уже подставится
             const mapped = mapOwnerMeToUser(meResp.data);
             setUser(mapped);
-            useAuthStore.getState().setAuth({ user: mapped });
             await AsyncStorage.setItem('user', JSON.stringify(mapped));
             router.replace('/car-owner');
             return {success: true};
@@ -602,7 +433,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
             const newUser = response.data.user as User;
             setUser(newUser);
-            useAuthStore.getState().setAuth({ user: newUser });
             await AsyncStorage.setItem('user', JSON.stringify(newUser));
             setNeedsCarWashDetails(false);
             setAuthStep('complete');
@@ -638,7 +468,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const mapped = mapOwnerMeToUser(meResp.data);
                     setUser(mapped);
                     await AsyncStorage.setItem('user', JSON.stringify(mapped));
-                    useAuthStore.getState().setAuth({ user: mapped }); // 👈 сохраняем в zustand
                     setAuthStep('complete');
                     router.replace('/car-owner');
                     return { success: true, user: mapped };
@@ -647,7 +476,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const mapped = mapWasherMeToUser(meResp.data);
                     setUser(mapped);
                     await AsyncStorage.setItem('user', JSON.stringify(mapped));
-                    useAuthStore.getState().setAuth({ user: mapped }); // 👈 сохраняем в zustand
                     setAuthStep('complete');
                     router.replace('/car-wash');
                     return { success: true, user: mapped };
@@ -746,8 +574,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         userType,
         setUserType,
         isLoading,
-        accessToken,
-        refreshToken,
         sendVerificationCode,
         verifyCode,
         completeCarOwnerRegistration,
@@ -783,8 +609,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setUser,
         userType,
         setUserType,
-        accessToken,
-        refreshToken,
         isLoading,
         sendVerificationCode,
         verifyCode,

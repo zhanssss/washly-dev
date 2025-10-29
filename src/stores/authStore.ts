@@ -1,173 +1,166 @@
-// stores/authStore.ts
-import {create} from 'zustand';
-import {persist, createJSONStorage} from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+    // stores/authStore.ts
+    import {create} from 'zustand';
+    import {persist, createJSONStorage} from 'zustand/middleware';
+    import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ===== тип из /client/me =====
-export type ClientMe = {
-    id: number;
-    phone: string;
-    role: 'client' | 'washer';
-    registered_at: string;
-    car_number: string;
-    car_body: string;            // сервер шлёт как строку ("2")
-    last_wash: string | null;
-};
+    // ===== тип из /client/me =====
+    export type ClientMe = {
+        id: number;
+        phone: string;
+        role: 'client' | 'washer';
+        registered_at: string;
+        car_number: string;
+        car_body: string;            // сервер шлёт как строку ("2")
+        last_wash: string | null;
+    };
 
-// 👇 если типы уже объявлены в AuthContext — можешь импортировать оттуда.
-// Здесь оставляю дубликаты для изоляции.
-export interface CarWashDetails {
-    name: string;
-    address: string;
-    phone: string;
-    latitude: number;
-    longitude: number;
-    washBays: number;
-    workingHours: { start: string; end: string; is24Hours: boolean };
-}
+    // 👇 если типы уже объявлены в AuthContext — можешь импортировать оттуда.
+    // Здесь оставляю дубликаты для изоляции.
+    export interface CarWashDetails {
+        name: string;
+        address: string;
+        phone: string;
+        latitude: number;
+        longitude: number;
+        washBays: number;
+        workingHours: { start: string; end: string; is24Hours: boolean };
+    }
 
-export interface CarDetails {
-    ownerName: string;
-    licensePlate: string;
-    brand: string;
-    model: string;
-    bodyType: string;
-    color?: string;
-}
+    export interface CarDetails {
+        ownerName: string;
+        licensePlate: string;
+        brand: string;
+        model: string;
+        bodyType: string;
+        color?: string;
+    }
 
-export interface User {
-    id: string;
-    phone: string;
-    type: 'car-owner' | 'car-wash';
-    name?: string;
-    isVerified: boolean;
-    password?: string;
-    carDetails?: CarDetails;
-    carWashDetails?: CarWashDetails;
-}
+    export interface User {
+        id: string;
+        phone: string;
+        type: 'car-owner' | 'car-wash';
+        name?: string;
+        isVerified: boolean;
+        password?: string;
+        carDetails?: CarDetails;
+        carWashDetails?: CarWashDetails;
+    }
 
-type Nullable<T> = T | null;
+    type Nullable<T> = T | null;
 
-// ---------- utils для телефона ----------
-const onlyDigits = (s = '') => s.replace(/\D/g, '');
+    // ---------- utils для телефона ----------
+    const onlyDigits = (s = '') => s.replace(/\D/g, '');
 
-export const normalizeKzPhone = (raw: string) => {
-    // приводим к 7XXXXXXXXXX (11 цифр)
-    let d = onlyDigits(raw);
-    if (!d) return '';
-    if (d[0] === '8') d = '7' + d.slice(1);
-    if (d[0] !== '7') d = '7' + d;
-    return d.slice(0, 11);
-};
+    export const normalizeKzPhone = (raw: string) => {
+        // приводим к 7XXXXXXXXXX (11 цифр)
+        let d = onlyDigits(raw);
+        if (!d) return '';
+        if (d[0] === '8') d = '7' + d.slice(1);
+        if (d[0] !== '7') d = '7' + d;
+        return d.slice(0, 11);
+    };
 
-export const formatKzPhone = (digits: string) => {
-    const d = onlyDigits(digits);
-    if (!d) return '';
-    const c = d.padEnd(11, ' ');
-    const country = '+7';
-    const a = c.slice(1, 4).trim();
-    const b = c.slice(4, 7).trim();
-    const c2 = c.slice(7, 9).trim();
-    const d2 = c.slice(9, 11).trim();
+    export const formatKzPhone = (digits: string) => {
+        const d = onlyDigits(digits);
+        if (!d) return '';
+        const c = d.padEnd(11, ' ');
+        const country = '+7';
+        const a = c.slice(1, 4).trim();
+        const b = c.slice(4, 7).trim();
+        const c2 = c.slice(7, 9).trim();
+        const d2 = c.slice(9, 11).trim();
 
-    let out = country;
-    if (a) out += ` (${a}`;
-    if (a.length === 3) out += `)`;
-    if (b) out += ` ${b}`;
-    if (c2) out += ` ${c2}`;
-    if (d2) out += ` ${d2}`;
-    return out;
-};
+        let out = country;
+        if (a) out += ` (${a}`;
+        if (a.length === 3) out += `)`;
+        if (b) out += ` ${b}`;
+        if (c2) out += ` ${c2}`;
+        if (d2) out += ` ${d2}`;
+        return out;
+    };
 
-// ---------- store ----------
-type AuthState = {
-    // маппленный пользователь для UI
-    user: Nullable<User>;
-    accessToken: Nullable<string>;
-    refreshToken: Nullable<string>;
+    // ---------- store ----------
+    type AuthState = {
+        user: Nullable<User>;
+        clientMe: Nullable<ClientMe>;
 
-    // «сырой» профиль клиента из /client/me (как есть)
-    clientMe: Nullable<ClientMe>;
+        setAuthUser: (u: Nullable<User>) => void;
+        clearAuth: () => void;
 
-    // setters
-    setAuth: (p: Partial<Pick<AuthState, 'user' | 'accessToken' | 'refreshToken'>>) => void;
-    clearAuth: () => void;
+        // raw client profile
+        setClientMe: (raw: ClientMe) => void;
+        clearClientMe: () => void;
 
-    // raw client profile
-    setClientMe: (raw: ClientMe) => void;
-    clearClientMe: () => void;
+        // точечные апдейтеры
+        updateUser: (u: Partial<User>) => void;
+        updateCarWashDetails: (d: Partial<CarWashDetails>) => void;
 
-    // точечные апдейтеры
-    updateUser: (u: Partial<User>) => void;
-    updateCarWashDetails: (d: Partial<CarWashDetails>) => void;
+        // селекторы по клиенту (удобно для payload-ов)
+        getClientId: () => number | null;
+        getClientCarNumber: () => string;
+        getClientCarBody: () => string | null;
 
-    // селекторы по клиенту (удобно для payload-ов)
-    getClientId: () => number | null;
-    getClientCarNumber: () => string;
-    getClientCarBody: () => string | null;
+        // телефон
+        updateUserPhoneFromInput: (input: string) => void;
+        getUserPhoneDigits: () => string;
+        getUserPhoneFormatted: () => string;
+    };
 
-    // телефон
-    updateUserPhoneFromInput: (input: string) => void;
-    getUserPhoneDigits: () => string;
-    getUserPhoneFormatted: () => string;
-};
+    export const useAuthStore = create<AuthState>()(
+        persist(
+            (set, get) => ({
+                user: null,
+                clientMe: null,
+                setAuthUser: (u) => set({ user: u }),
+                clearAuth:   () => set({ user: null, clientMe: null }),
 
-export const useAuthStore = create<AuthState>()(
-    persist(
-        (set, get) => ({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
+                setClientMe: (raw) => set({ clientMe: raw }),
+                clearClientMe: () => set({ clientMe: null }),
 
-            clientMe: null,
+                updateUser: (u) =>
+                    set((s) => (s.user ? { user: { ...s.user, ...u } } : s)),
 
-            setAuth: (p) => set((s) => ({ ...s, ...p })),
-            clearAuth: () =>
-                set({ user: null, accessToken: null, refreshToken: null, clientMe: null }),
+                updateCarWashDetails: (d) =>
+                    set((s) => {
+                        if (!s.user || s.user.type !== 'car-wash') return s;
+                        const prev = s.user.carWashDetails ?? ({} as CarWashDetails);
+                        return { user: { ...s.user, carWashDetails: { ...prev, ...d } } };
+                    }),
 
-            setClientMe: (raw) => set({ clientMe: raw }),
-            clearClientMe: () => set({ clientMe: null }),
+                // === селекторы по /client/me ===
+                getClientId: () => get().clientMe?.id ?? null,
+                getClientCarNumber: () => get().clientMe?.car_number ?? '',
+                getClientCarBody: () => get().clientMe?.car_body ?? null,
 
-            updateUser: (u) =>
-                set((s) => (s.user ? { user: { ...s.user, ...u } } : s)),
-
-            updateCarWashDetails: (d) =>
-                set((s) => {
-                    if (!s.user || s.user.type !== 'car-wash') return s;
-                    const prev = s.user.carWashDetails ?? ({} as CarWashDetails);
-                    return { user: { ...s.user, carWashDetails: { ...prev, ...d } } };
+                // === ТЕЛЕФОН ===
+                updateUserPhoneFromInput: (input: string) => {
+                    const digits = normalizeKzPhone(input);
+                    set((s) => (s.user ? { user: { ...s.user, phone: digits } } : s));
+                },
+                getUserPhoneDigits: () => {
+                    const u = get().user;
+                    return u?.phone ? onlyDigits(u.phone) : '';
+                },
+                getUserPhoneFormatted: () => {
+                    const u = get().user;
+                    return u?.phone ? formatKzPhone(u.phone) : '';
+                },
+            }),
+            {
+                name: 'auth-store',
+                storage: createJSONStorage(() => AsyncStorage),
+                version: 3,
+                partialize: (s) => ({
+                    user: s.user,
+                    clientMe: s.clientMe,
                 }),
-
-            // === селекторы по /client/me ===
-            getClientId: () => get().clientMe?.id ?? null,
-            getClientCarNumber: () => get().clientMe?.car_number ?? '',
-            getClientCarBody: () => get().clientMe?.car_body ?? null,
-
-            // === ТЕЛЕФОН ===
-            updateUserPhoneFromInput: (input: string) => {
-                const digits = normalizeKzPhone(input);
-                set((s) => (s.user ? { user: { ...s.user, phone: digits } } : s));
-            },
-            getUserPhoneDigits: () => {
-                const u = get().user;
-                return u?.phone ? onlyDigits(u.phone) : '';
-            },
-            getUserPhoneFormatted: () => {
-                const u = get().user;
-                return u?.phone ? formatKzPhone(u.phone) : '';
-            },
-        }),
-        {
-            name: 'auth-store',
-            storage: createJSONStorage(() => AsyncStorage),
-            version: 2, // ↑ версия сторедж для миграции (было 1)
-            migrate: async (persisted: any, fromVersion) => {
-                // простая миграция: если старая версия — просто добавим clientMe: null
-                if (fromVersion < 2) {
-                    return { ...persisted, clientMe: null };
-                }
-                return persisted;
-            },
-        }
-    )
-);
+                migrate: async (persisted: any) => {
+                    if (persisted) {
+                        delete persisted.accessToken;
+                        delete persisted.refreshToken;
+                    }
+                    return persisted;
+                },
+            }
+        )
+    );

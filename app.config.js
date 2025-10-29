@@ -30,6 +30,7 @@ const base = {
     android: {
         versionCode: 1,
         softwareKeyboardLayoutMode: "resize",
+        usesCleartextTraffic: true,
         adaptiveIcon: {
             foregroundImage: "./assets/images/adaptive-icon.png",
             backgroundColor: "#ffffff",
@@ -38,6 +39,7 @@ const base = {
         permissions: [
             "android.permission.CAMERA",
             "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.INTERNET"
         ],
     },
     web: { favicon: "./assets/images/favicon.png" },
