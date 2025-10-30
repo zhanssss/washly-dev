@@ -129,6 +129,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         let mounted = true;
         (async () => {
             try {
+                const stored = await AsyncStorage.getItem('user');
+                if (stored) {
+                    const parsed = JSON.parse(stored) as User;
+                    if (mounted) {
+                        setUser(parsed);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(parsed);
+                    }
+                }
+            } catch (error) {
+                console.log('[AUTH] Failed to restore user from storage:', error);
+            }
+
+            try {
                 const r = await loadRefreshToken();
                 if (!r) return; // нет refresh — останемся на экранах входа
 
@@ -141,6 +155,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const mapped = mapOwnerMeToUser(me.data);
                     if (mounted) {
                         setUser(mapped);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(mapped);
                         await AsyncStorage.setItem('user', JSON.stringify(mapped));
                     }
                 } catch {
@@ -148,9 +164,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const mapped = mapWasherMeToUser(me.data);
                     if (mounted) {
                         setUser(mapped);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(mapped);
                         await AsyncStorage.setItem('user', JSON.stringify(mapped));
                     }
                 }
+            } catch (error) {
+                console.log('[AUTH] Failed to refresh session on start:', error);
             } finally {
                 if (mounted) setIsLoading(false);
             }
