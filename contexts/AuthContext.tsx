@@ -1,7 +1,7 @@
 // components/contexts/AuthContext.tsx
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useState, useEffect, useCallback, useMemo} from 'react';
+import {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 import {router} from 'expo-router';
 import axios from 'axios';
 import { useAuthStore } from '@/src/stores/authStore';
@@ -17,15 +17,6 @@ export interface CarDetails {
     color?: string;
 }
 
-type ClientMe = {
-    id: number;
-    phone: string;
-    role: 'client' | 'washer';
-    registered_at: string;
-    car_number: string;
-    car_body: string;     // приходит строкой "2"
-    last_wash: string | null;
-};
 export interface CarWashDetails {
     name: string;
     address: string;
@@ -76,6 +67,58 @@ function setAccess(token: string | null) {
     }
 }
 
+const BODY_MAP: Record<string, string> = {
+    '1': 'sedan',
+    '2': 'hatchback',
+    '3': 'suv',
+    '4': 'wagon',
+    '5': 'coupe',
+    '6': 'pickup',
+    '7': 'minivan',
+};
+
+const toBodyName = (codeOrName: unknown) => {
+    if (codeOrName == null) return '';
+    const s = String(codeOrName).trim();
+    if (BODY_MAP[s]) return BODY_MAP[s].toLowerCase();
+    return s.toLowerCase();
+};
+
+const mapOwnerMeToUser = (me: any): User => ({
+    id: String(me.id),
+    phone: me.phone,
+    type: 'car-owner',
+    isVerified: true,
+    carDetails: {
+        ownerName: '',
+        licensePlate: me.car_number,
+        brand: '',
+        model: '',
+        bodyType: toBodyName(me.car_body),
+    },
+});
+
+const mapWasherMeToUser = (me: any): User => ({
+    id: String(me.id),
+    phone: me.phone,
+    type: 'car-wash',
+    isVerified: true,
+    carWashDetails: {
+        name: me.name ?? '',
+        address: me.address ?? '',
+        phone: me.phone ?? '',
+        open_time: me.open_time ?? '',
+        latitude: Number(me.latitude ?? 0),
+        longitude: Number(me.longitude ?? 0),
+        washBays: Number(me.wash_bays ?? 0),
+        workingHours: {
+            start: me.working_hours?.start ?? '08:00',
+            end: me.working_hours?.end ?? '22:00',
+            is24Hours: Boolean(me.working_hours?.is24Hours ?? false),
+        },
+    },
+});
+
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
     const [user, setUser] = useState<User | null>(null);
@@ -119,45 +162,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setTempPassword(password);
     }, []);
 
-    const [pwResetDebugCode, setPwResetDebugCode] = useState<string | null>(null);
-    const [pwResetVerifiedCode, setPwResetVerifiedCode] = useState<string | null>(null);
     const [pwResetToken, setPwResetToken] = useState<string | null>(null);
-    const [pwResetTTL, setPwResetTTL] = useState<number | null>(null); // minutes
-
-
-    useEffect(() => {
-        let mounted = true;
-        (async () => {
-            try {
-                const r = await loadRefreshToken();
-                if (!r) return; // нет refresh — останемся на экранах входа
-
-                // Получим свежий access в память:
-                await ensureFreshAccess();
-
-                // Подтянем профиль: сначала клиент, потом автомойка (или наоборот — по продуктовой логике)
-                try {
-                    const me = await api.get(CLIENT_ME_URL);
-                    const mapped = mapOwnerMeToUser(me.data);
-                    if (mounted) {
-                        setUser(mapped);
-                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
-                    }
-                } catch {
-                    const me = await api.get(WASHER_ME_URL);
-                    const mapped = mapWasherMeToUser(me.data);
-                    if (mounted) {
-                        setUser(mapped);
-                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
-                    }
-                }
-            } finally {
-                if (mounted) setIsLoading(false);
-            }
-        })();
-        return () => { mounted = false; };
-    }, []);
-
 
 
     const saveTokens = useCallback(async (access?: string | null, refresh?: string | null) => {
@@ -172,27 +177,84 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
 
 
-    let refreshPromise: Promise<string> | null = null;
+    const refreshPromiseRef = useRef<Promise<string> | null>(null);
 
-    async function ensureFreshAccess(): Promise<string> {
+    const ensureFreshAccess = useCallback(async (): Promise<string> => {
         if (accessInMemory && !isExpiring(accessExpMs)) return accessInMemory;
 
         const storedRefresh = await loadRefreshToken();
-        if (!storedRefresh) throw new Error('No refresh');
+        if (!storedRefresh) throw new Error('No refresh token available');
 
-        if (!refreshPromise) {
-            refreshPromise = axios.post(REFRESH_URL, { refresh: storedRefresh })
+        if (!refreshPromiseRef.current) {
+            refreshPromiseRef.current = axios
+                .post(REFRESH_URL, { refresh: storedRefresh })
                 .then(async (resp) => {
-                    const newAccess  = resp.data?.access;
-                    const newRefresh = resp.data?.refresh; // если бэк ротирует refresh
+                    const newAccess = resp.data?.access;
+                    const newRefresh = resp.data?.refresh;
                     if (!newAccess) throw new Error('No access from refresh');
                     await saveTokens(newAccess, newRefresh ?? null);
                     return newAccess as string;
                 })
-                .finally(() => { refreshPromise = null; });
+                .finally(() => {
+                    refreshPromiseRef.current = null;
+                });
         }
-        return await refreshPromise!;
-    }
+
+        return refreshPromiseRef.current;
+    }, [saveTokens]);
+
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const stored = await AsyncStorage.getItem('user');
+                if (stored) {
+                    const parsed = JSON.parse(stored) as User;
+                    if (mounted) {
+                        setUser(parsed);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(parsed);
+                    }
+                }
+            } catch (error) {
+                console.log('[AUTH] Failed to restore user from storage:', error);
+            }
+
+            try {
+                const r = await loadRefreshToken();
+                if (!r) return;
+
+                await ensureFreshAccess();
+
+                try {
+                    const me = await api.get(CLIENT_ME_URL);
+                    const mapped = mapOwnerMeToUser(me.data);
+                    if (mounted) {
+                        setUser(mapped);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(mapped);
+                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    }
+                } catch {
+                    const me = await api.get(WASHER_ME_URL);
+                    const mapped = mapWasherMeToUser(me.data);
+                    if (mounted) {
+                        setUser(mapped);
+                        setAuthStep('complete');
+                        useAuthStore.getState().setAuthUser(mapped);
+                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    }
+                }
+            } catch (error) {
+                console.log('[AUTH] Failed to refresh session on start:', error);
+            } finally {
+                if (mounted) setIsLoading(false);
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, [ensureFreshAccess]);
 
     useEffect(() => {
         const reqId = api.interceptors.request.use(async (cfg) => {
@@ -233,7 +295,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             api.interceptors.request.eject(reqId);
             api.interceptors.response.eject(respId);
         };
-    }, [saveTokens, clearTokens]);
+    }, [ensureFreshAccess, clearTokens]);
 
 
 
@@ -316,66 +378,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }, [pendingPhone, saveTokens]);
 
 
-
-    // AuthContext.tsx (вверху файла, рядом с интерфейсами)
-    const BODY_MAP: Record<string, string> = {
-        '1': 'sedan',
-        '2': 'hatchback',
-        '3': 'suv',
-        '4': 'wagon',      // универсал
-        '5': 'coupe',
-        '6': 'pickup',
-        '7': 'minivan',
-        // дополни/исправь под свои коды с бэка
-    };
-
-// на всякий случай — приводим к единому виду
-    const toBodyName = (codeOrName: unknown) => {
-        if (codeOrName == null) return '';
-        const s = String(codeOrName).trim();
-        // если это код, попробуем по карте
-        if (BODY_MAP[s]) return BODY_MAP[s].toLowerCase();
-        // если уже имя — вернём как имя
-        return s.toLowerCase();
-    };
-
-
-    const mapOwnerMeToUser = (me: any): User => ({
-        id: String(me.id),
-        phone: me.phone,
-        type: 'car-owner',
-        isVerified: true,
-        carDetails: {
-            ownerName: '',
-            licensePlate: me.car_number,
-            brand: '',
-            model: '',
-            bodyType: toBodyName(me.car_body), // ← ключевая строка
-        },
-    });
-
-
-
-    const mapWasherMeToUser = (me: any): User => ({
-        id: String(me.id),
-        phone: me.phone,
-        type: 'car-wash',
-        isVerified: true,
-        carWashDetails: {
-            name: me.name ?? '',
-            address: me.address ?? '',
-            phone: me.phone ?? '',
-            open_time: me.open_time ?? '',
-            latitude: Number(me.latitude ?? 0),
-            longitude: Number(me.longitude ?? 0),
-            washBays: Number(me.wash_bays ?? 0),
-            workingHours: {
-                start: me.working_hours?.start ?? '08:00',
-                end: me.working_hours?.end ?? '22:00',
-                is24Hours: Boolean(me.working_hours?.is24Hours ?? false),
-            },
-        },
-    });
 
     const registerDriver = useCallback(async (payload: {
         phone: string;
@@ -525,7 +527,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             const ttl = Number(res?.data?.ttl_minutes ?? 0) || null;
             if (!token) return { success: false, error: 'Токен не получен' };
             setPwResetToken(token);
-            setPwResetTTL(ttl);
             return { success: true, reset_token: token, ttl_minutes: ttl };
         } catch (e: any) {
             return { success: false, error: e?.response?.data?.detail || 'Неверный код' };
@@ -543,7 +544,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             });
             // cleanup
             setPwResetToken(null);
-            setPwResetTTL(null);
             return { success: true, message: res?.data?.message || 'Пароль сброшен' };
         } catch (e: any) {
             return { success: false, error: e?.response?.data?.detail || 'Не удалось изменить пароль' };
