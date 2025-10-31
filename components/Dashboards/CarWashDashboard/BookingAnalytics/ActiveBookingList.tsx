@@ -51,7 +51,7 @@ export default function ActiveBookingsList({
                                                selectedDate,
                                                registerRefetch,
                                            }: Props) {
-    const token = useAuthStore(s => s.accessToken);
+    const token = useAuthStore((s) => s.accessToken);
     const user = useAuthStore(s => s.user);
     const dateStr = useMemo(() => dateKeyKZ(selectedDate), [selectedDate]);
 
@@ -59,7 +59,7 @@ export default function ActiveBookingsList({
         queryKey: ['cw-active-bookings', user?.id, dateStr],
         queryFn: async () => {
             if (!token || !user?.id) throw new Error('Нет токена или car_wash_id');
-            const data = await fetchDashboardBookings(Number(user.id), token);
+            const data = await fetchDashboardBookings(Number(user.id));
             const sameDay = (data as DashboardBooking[]).filter(
                 b => dateKeyKZ(b.created_at) === dateStr
             );

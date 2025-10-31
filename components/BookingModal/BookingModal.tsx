@@ -125,7 +125,8 @@ export default function BookingModal({
 
                                          onClose,
                                      }: Props) {
-    const user = useAuthStore((s) => s.user);
+    const clientId = useAuthStore((s) => s.getClientId());
+    const accessToken = useAuthStore((s) => s.accessToken);
     const [submitting, setSubmitting] = React.useState(false);
     const [conflict, setConflict] = React.useState<ActiveConflict | null>(null);
     const [replaceVisible, setReplaceVisible] = React.useState(false);
@@ -136,14 +137,17 @@ export default function BookingModal({
         if (!selectedWash || !selectedBoxId || !selectedSlot || selectedBodyId == null) return;
 
         const slot_index = Number((selectedSlot as any)?.slot_index ?? (selectedSlot as any)?.id);
-        const client = Number(user?.id);
+        const client = clientId; // number | null — не приводим к Number()
         const car_body = Number(selectedBodyId);
         const total_price = Number(calculateTotalPrice?.() ?? 0);
+
         const extra_services = Array.isArray(selectedExtras) ? selectedExtras : [];
 
         if (!Number.isFinite(slot_index)) return Alert.alert('Ошибка', 'Не удалось определить slot_index.');
-        if (!Number.isFinite(client)) return Alert.alert('Ошибка', `Не удалось определить пользователя ${client}. Войдите в аккаунт.`);
+        if (client == null) return Alert.alert('Ошибка', 'Не удалось определить пользователя. Войдите в аккаунт.');
         if (!Number.isFinite(car_body)) return Alert.alert('Ошибка', 'Не выбран тип кузова.');
+
+
 
         const payload: CreateBookingPayload = {
             car_wash: Number(selectedWash.id),
@@ -155,10 +159,12 @@ export default function BookingModal({
             total_price,
         };
 
+        console.log(payload);
+
         try {
             setSubmitting(true);
             lastPayloadRef.current = payload;
-            await createBooking(payload);
+            await createBooking(payload, accessToken);
 
             Alert.alert('Запись создана', `Мойка: ${selectedWash.name}\nСумма: ${total_price.toLocaleString()} ₸`);
             await onReloadSlots(Number(selectedWash.id), selectedBoxId, bookingDate);
@@ -202,14 +208,14 @@ export default function BookingModal({
 
             // 1) сперва отменяем старую бронь
             if (oldId) {
-                await cancelDriverBooking(oldId);
+                await cancelDriverBooking(oldId, accessToken);
             }
 
             // 2) потом создаём новую
             const payload = { ...lastPayloadRef.current };
             delete (payload as any).replace_existing; // на всякий случай
 
-            await createBooking(payload);
+            await createBooking(payload, accessToken);
             setReplaceVisible(false);
             setConflict(null);
             Alert.alert('Готово', 'Время перенесено');

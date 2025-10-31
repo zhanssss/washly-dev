@@ -4,10 +4,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useState, useEffect, useCallback, useMemo} from 'react';
 import {router} from 'expo-router';
 import axios from 'axios';
-import { useAuthStore } from '@/src/stores/authStore';
-import { API_BASE_URL } from '@/src/config/env';
-import { saveRefreshToken, loadRefreshToken, clearRefreshToken, getJwtExp, isExpiring, saveUserSnapshot, loadUserSnapshot,  saveAccessToken,
-    loadAccessToken, } from '@/src/auth/token';
+import {useAuthStore} from '@/src/stores/authStore';
+import {API_BASE_URL} from '@/src/config/env';
+import {
+    saveRefreshToken,
+    loadRefreshToken,
+    clearRefreshToken,
+    getJwtExp,
+    isExpiring,
+    saveUserSnapshot,
+    loadUserSnapshot,
+    saveAccessToken,
+    loadAccessToken,
+} from '@/src/auth/token';
 
 export interface CarDetails {
     ownerName: string;
@@ -27,6 +36,7 @@ type ClientMe = {
     car_body: string;     // приходит строкой "2"
     last_wash: string | null;
 };
+
 export interface CarWashDetails {
     name: string;
     address: string;
@@ -66,6 +76,7 @@ const WASHER_ME_URL = '/washer/me/';
 // Access держим в памяти процесса:
 let accessInMemory: string | null = null;
 let accessExpMs: number | null = null;
+
 function setAccess(token: string | null) {
     accessInMemory = token;
     const setAccessToken = useAuthStore.getState().setAccessToken;
@@ -79,7 +90,6 @@ function setAccess(token: string | null) {
         accessExpMs = null;
     }
 }
-
 
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -130,6 +140,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const [pwResetTTL, setPwResetTTL] = useState<number | null>(null); // minutes
 
 
+    // Вверху файла добавь получение методов стора:
+    const { setAuthUser: setAuthUserStore, setClientMe, clearClientMe } = useAuthStore.getState();
+
+
     useEffect(() => {
         let mounted = true;
         (async () => {
@@ -164,6 +178,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                             if (mounted) {
                                 setUser(mapped);
                                 await saveUserSnapshot(mapped);
+                                setAuthUserStore(mapped);
+                                setClientMe(me.data);
                             }
                         } catch {
                             try {
@@ -172,8 +188,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                                 if (mounted) {
                                     setUser(mapped2);
                                     await saveUserSnapshot(mapped2);
+                                    setAuthUserStore(mapped2);
+                                    clearClientMe();
                                 }
-                            } catch { /* останемся неавторизованы */ }
+                            } catch { /* останемся неавторизованы */
+                            }
                         }
                     }
                     return; // ⬅️ важный ранний выход: не трогаем refresh-логику ниже
@@ -200,9 +219,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 if (mounted) setIsLoading(false);
             }
         })();
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+        };
     }, []);
-
 
 
     const saveTokens = useCallback(async (access?: string | null, refresh?: string | null) => {
@@ -219,7 +239,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }, []);
 
 
-
     let refreshPromise: Promise<string> | null = null;
 
     async function ensureFreshAccess(): Promise<string> {
@@ -229,15 +248,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         if (!storedRefresh) throw new Error('No refresh');
 
         if (!refreshPromise) {
-            refreshPromise = axios.post(REFRESH_URL, { refresh: storedRefresh })
+            refreshPromise = axios.post(REFRESH_URL, {refresh: storedRefresh})
                 .then(async (resp) => {
-                    const newAccess  = resp.data?.access;
+                    const newAccess = resp.data?.access;
                     const newRefresh = resp.data?.refresh; // если бэк ротирует refresh
                     if (!newAccess) throw new Error('No access from refresh');
                     await saveTokens(newAccess, newRefresh ?? null);
                     return newAccess as string;
                 })
-                .finally(() => { refreshPromise = null; });
+                .finally(() => {
+                    refreshPromise = null;
+                });
         }
         return await refreshPromise!;
     }
@@ -284,42 +305,41 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }, [saveTokens, clearTokens]);
 
 
-
 // Отправка кода (регистрация/вход по SMS)
     const sendVerificationCode = useCallback(async (phone: string) => {
         try {
-            const resp = await api.post('/auth/otp/request/', { phone });
+            const resp = await api.post('/auth/otp/request/', {phone});
             if (resp.data?.message) {
                 setPendingPhone(phone);
                 setShowCode(true);
                 setAuthStep('code');
-                return { success: true };
+                return {success: true};
             }
-            return { success: false, error: 'Не удалось отправить код' };
+            return {success: false, error: 'Не удалось отправить код'};
         } catch (e) {
             console.log('[AUTH] sendVerificationCode error:', e);
-            return { success: false, error: 'Ошибка отправки кода' };
+            return {success: false, error: 'Ошибка отправки кода'};
         }
     }, []);
     const verifyCode = useCallback(async (inputCode: string) => {
         try {
-            const resp = await api.post('/auth/otp/verify/', { phone: pendingPhone, code: inputCode });
-            if (!resp.data) return { success: false, error: 'Пустой ответ сервера' };
+            const resp = await api.post('/auth/otp/verify/', {phone: pendingPhone, code: inputCode});
+            if (!resp.data) return {success: false, error: 'Пустой ответ сервера'};
 
-            const { access, refresh, user: apiUser, is_registered } = resp.data;
+            const {access, refresh, user: apiUser, is_registered} = resp.data;
 
             if (!is_registered) {
                 setPendingPhone('');
                 // необязательно, но логично отметить шаг деталями
                 setAuthStep('details');
                 router.replace('/car-registration');
-                return { success: true, isRegistered: false, user: apiUser };
+                return {success: true, isRegistered: false, user: apiUser};
             }
 
             if (access && refresh) {
                 await saveTokens(access, refresh);
             } else {
-                return { success: false, error: 'Токены не получены' };
+                return {success: false, error: 'Токены не получены'};
             }
             // 2) роль
             const detectedType: 'car-owner' | 'car-wash' =
@@ -335,6 +355,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const mapped = mapOwnerMeToUser(meResp.data);
                 setUser(mapped);
                 await saveUserSnapshot(mapped);
+                setAuthUserStore(mapped);
+                setClientMe(meResp.data);
                 setAuthStep('complete');
                 setPendingPhone('');
                 router.replace('/car-owner'); // оставил твой прежний роут
@@ -343,12 +365,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const mapped = mapWasherMeToUser(meResp.data);
                 setUser(mapped);
                 await saveUserSnapshot(mapped);
+                setAuthUserStore(mapped);
+                clearClientMe();
                 setAuthStep('complete');
                 setPendingPhone('');
                 router.replace('/car-wash');
             }
 
-            return { success: true, isRegistered: true, user: apiUser };
+            return {success: true, isRegistered: true, user: apiUser};
         } catch (err) {
             if (axios.isAxiosError(err)) {
                 const serverData = err.response?.data as any;
@@ -357,12 +381,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     serverData?.error ||
                     err.message ||
                     'Неверный код или ошибка сервера';
-                return { success: false, error: msg };
+                return {success: false, error: msg};
             }
-            return { success: false, error: 'Неверный код или ошибка сервера' };
+            return {success: false, error: 'Неверный код или ошибка сервера'};
         }
     }, [pendingPhone, saveTokens]);
-
 
 
     // AuthContext.tsx (вверху файла, рядом с интерфейсами)
@@ -401,7 +424,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             bodyType: toBodyName(me.car_body), // ← ключевая строка
         },
     });
-
 
 
     const mapWasherMeToUser = (me: any): User => ({
@@ -450,6 +472,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             const mapped = mapOwnerMeToUser(meResp.data);
             setUser(mapped);
             await saveUserSnapshot(mapped);
+            setAuthUserStore(mapped);
+            setClientMe(meResp.data);
             router.replace('/car-owner');
             return {success: true};
         } catch (err: any) {
@@ -495,16 +519,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     // Вход с паролем
     const loginWithPassword = useCallback(async (phone: string, password: string) => {
         try {
-            const response = await api.post('/auth/token/', { phone, password });
+            const response = await api.post('/auth/token/', {phone, password});
 
             // токены приходят в body (или подстрахуемся заголовками)
-            let { access, refresh } = response.data ?? {};
+            let {access, refresh} = response.data ?? {};
             if (!access || !refresh) {
-                access  = access  ?? response.headers?.['access']  ?? response.headers?.['access-token'];
+                access = access ?? response.headers?.['access'] ?? response.headers?.['access-token'];
                 refresh = refresh ?? response.headers?.['refresh'] ?? response.headers?.['refresh-token'];
             }
             if (!access || !refresh) {
-                return { success: false, error: 'Токены не получены' };
+                return {success: false, error: 'Токены не получены'};
             }
 
             await saveTokens(access, refresh);
@@ -516,17 +540,23 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const mapped = mapOwnerMeToUser(meResp.data);
                     setUser(mapped);
                     await saveUserSnapshot(mapped);
+                    setAuthUserStore(mapped);
+                    setClientMe(meResp.data);
                     setAuthStep('complete');
                     router.replace('/car-owner');
                     return { success: true, user: mapped };
+
                 } else {
                     const meResp = await api.get(WASHER_ME_URL);
                     const mapped = mapWasherMeToUser(meResp.data);
                     setUser(mapped);
                     await saveUserSnapshot(mapped);
+                    setAuthUserStore(mapped);
+                    clearClientMe();
                     setAuthStep('complete');
                     router.replace('/car-wash');
                     return { success: true, user: mapped };
+
                 }
             };
             const first = userType === 'car-wash' ? 'car-wash' : 'car-owner';
@@ -540,19 +570,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 } catch (e2) {
                     // если оба не сработали — чистим токены
                     await clearTokens();
-                    return { success: false, error: 'Не удалось получить профиль' };
+                    return {success: false, error: 'Не удалось получить профиль'};
                 }
             }
         } catch (error) {
             console.log('Error logging in with password:', error);
-            return { success: false, error: 'Ошибка входа' };
+            return {success: false, error: 'Ошибка входа'};
         }
     }, [userType, saveTokens, clearTokens]);
 
 // 1) REQUEST: POST /api/carwash/password/reset/request/
     const sendPasswordResetCode = useCallback(async (phone: string) => {
         try {
-            const res = await api.post('/carwash/password/reset/request/', { phone });
+            const res = await api.post('/carwash/password/reset/request/', {phone});
             // backend returns { message, debug_code }
             return {
                 success: true,
@@ -560,29 +590,29 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 debug: res?.data?.debug_code ?? '',
             };
         } catch (e: any) {
-            return { success: false, error: e?.response?.data?.detail || 'Ошибка отправки кода' };
+            return {success: false, error: e?.response?.data?.detail || 'Ошибка отправки кода'};
         }
     }, []);
 
 // 2) VERIFY: POST /api/carwash/password/reset/verify/
     const verifyPasswordResetCode = useCallback(async (phone: string, code: string) => {
         try {
-            const res = await api.post('/carwash/password/reset/verify/', { phone, code });
+            const res = await api.post('/carwash/password/reset/verify/', {phone, code});
             // { reset_token, ttl_minutes }
             const token = res?.data?.reset_token || null;
             const ttl = Number(res?.data?.ttl_minutes ?? 0) || null;
-            if (!token) return { success: false, error: 'Токен не получен' };
+            if (!token) return {success: false, error: 'Токен не получен'};
             setPwResetToken(token);
             setPwResetTTL(ttl);
-            return { success: true, reset_token: token, ttl_minutes: ttl };
+            return {success: true, reset_token: token, ttl_minutes: ttl};
         } catch (e: any) {
-            return { success: false, error: e?.response?.data?.detail || 'Неверный код' };
+            return {success: false, error: e?.response?.data?.detail || 'Неверный код'};
         }
     }, []);
 
 // 3) COMPLETE: POST /api/carwash/password/reset/complete/
     const resetPassword = useCallback(async (_phone: string, newPassword: string) => {
-        if (!pwResetToken) return { success: false, error: 'Нет reset_token. Сначала подтвердите код.' };
+        if (!pwResetToken) return {success: false, error: 'Нет reset_token. Сначала подтвердите код.'};
         try {
             const res = await api.post('/carwash/password/reset/complete/', {
                 reset_token: pwResetToken,
@@ -592,9 +622,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             // cleanup
             setPwResetToken(null);
             setPwResetTTL(null);
-            return { success: true, message: res?.data?.message || 'Пароль сброшен' };
+            return {success: true, message: res?.data?.message || 'Пароль сброшен'};
         } catch (e: any) {
-            return { success: false, error: e?.response?.data?.detail || 'Не удалось изменить пароль' };
+            return {success: false, error: e?.response?.data?.detail || 'Не удалось изменить пароль'};
         }
     }, [pwResetToken]);
 

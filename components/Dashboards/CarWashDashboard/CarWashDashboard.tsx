@@ -282,7 +282,6 @@ type BaseService = { id: string; name: string };
 function CarWashAdminScreen() {
     const user = useAuthStore(s => s.user);
     const placeholderPhoto = placeholderPhoto1;
-// стейты
     const [twoGisPlaceId, setTwoGisPlaceId] = useState<string | null>(null);
     const [placeTitle, setPlaceTitle] = useState<string>('');
     const [placeRating, setPlaceRating] = useState<number | null>(null);
@@ -409,8 +408,8 @@ function CarWashAdminScreen() {
         const fetchCarWash = async () => {
             try {
                 if (!user?.id) return;
-                const res = await api.get(`/dashboard/carwashes/${user.id}/`);
-                const data = res.data;
+                const { data } = await api.get(`/dashboard/carwashes/${user.id}/`);
+
 
                 // Заполняем стейты только если значение реально есть
                 if (data.name) setPlaceTitle(data.name);

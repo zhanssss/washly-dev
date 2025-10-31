@@ -134,7 +134,16 @@
                     }),
 
                 // === селекторы по /client/me ===
-                getClientId: () => get().clientMe?.id ?? null,
+                getClientId: () => {
+                    const s = get();
+                    if (s.clientMe?.id != null) return s.clientMe.id;
+                    if (s.user?.type === 'car-owner') {
+                        const n = Number(s.user.id);
+                        return Number.isFinite(n) ? n : null;
+                    }
+                    return null;
+                },
+
                 getClientCarNumber: () => get().clientMe?.car_number ?? '',
                 getClientCarBody: () => get().clientMe?.car_body ?? null,
 

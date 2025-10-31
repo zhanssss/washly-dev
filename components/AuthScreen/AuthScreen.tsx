@@ -69,8 +69,8 @@ export default function AuthScreen() {
     const [smsCode, setSmsCode] = useState('');
 
     const {
-        sendVerificationCode,          // отправка SMS-кода для входа/регистрации
-        verifyCode: verifySmsCode,     // ✅ алиас, чтобы не конфликтовать с локальным стейтом
+        sendVerificationCode,
+        verifyCode: verifySmsCode,
         loginWithPassword,
         sendPasswordResetCode,
         verifyPasswordResetCode,
