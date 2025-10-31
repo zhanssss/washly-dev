@@ -17,6 +17,7 @@
     // 👇 если типы уже объявлены в AuthContext — можешь импортировать оттуда.
     // Здесь оставляю дубликаты для изоляции.
     export interface CarWashDetails {
+        id: number;
         name: string;
         address: string;
         phone: string;

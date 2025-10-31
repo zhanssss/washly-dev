@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ActiveBookingsList from '@/components/Dashboards/CarWashDashboard/BookingAnalytics/ActiveBookingList';
 import {fetchDashboardStats, type DashboardStatsResponse} from '@/src/services/api/dashboardApi';
-import { GIS_API_KEY} from '@/src/config/env';
+import {API_BASE_URL, GIS_API_KEY} from '@/src/config/env';
 import { buildStatsExportUrl, type StatsKind, type ExportFormat } from '@/src/services/api/exportsApi';
 import { downloadAndShare } from '@/src/utils/download';
 
@@ -408,7 +408,11 @@ function CarWashAdminScreen() {
         const fetchCarWash = async () => {
             try {
                 if (!user?.id) return;
-                const { data } = await api.get(`/dashboard/carwashes/${user.id}/`);
+                const carWashId = user?.carWashDetails?.id ?? user?.id;
+                const { data } = await api.get(`/dashboard/carwashes/${carWashId}/`, {
+                    baseURL: API_BASE_URL,     // 👈 без /api
+                });
+
 
 
                 // Заполняем стейты только если значение реально есть
