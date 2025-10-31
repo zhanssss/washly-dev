@@ -413,9 +413,6 @@ function CarWashAdminScreen() {
                     baseURL: API_BASE_URL,     // 👈 без /api
                 });
 
-
-
-                // Заполняем стейты только если значение реально есть
                 if (data.name) setPlaceTitle(data.name);
                 if (data.address) setPlaceAddress(data.address);
                 if (data.latitude) setLat(Number(data.latitude));
@@ -645,7 +642,7 @@ function CarWashAdminScreen() {
         const form = buildSetupForm({
             car_wash_id: carWashIdNum,
             name: placeTitle.trim(),
-            address: placeAddress || '',
+            address: placeAddress,
             latitude: typeof lat === 'number' ? lat : 0,
             longitude: typeof lon === 'number' ? lon : 0,
             two_gis_id: twoGisPlaceId,
@@ -658,8 +655,12 @@ function CarWashAdminScreen() {
             imgUri: placePhotoUrl ?? null,
         });
 
+        console.log(form);
+
         try {
-            const res = await api.postForm(`/dashboard/carwash/setup/`, form);
+            const res = await api.postForm(`/dashboard/carwash/setup/`, form, {
+                baseURL: API_BASE_URL,     // 👈 без /api
+            });
             const data = res?.data ?? {};
 
             if (data?.img) {
