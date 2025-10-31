@@ -1,9 +1,12 @@
 // src/services/api/qrApi.ts
 import { API_BASE_URL } from "@/src/config/env";
+import { useAuthStore } from "@/src/stores/authStore";
+const getBearer = () => useAuthStore.getState().accessToken
 
 type Method = "GET" | "POST";
 
-async function req<T = any>(path: string, method: Method, bearer: string | null, body?: any): Promise<T> {
+async function req<T = any>(path: string, method: Method, body?: any): Promise<T> {
+    const bearer = getBearer();
     let res: Response;
     try {
         res = await fetch(`${API_BASE_URL}${path}`, {
@@ -80,34 +83,34 @@ export type CashApproveResponse = { ok: true };
 /* ==================== ФУНКЦИИ ==================== */
 
 // --- DASHBOARD (мойка) ---
-export async function createQrSession(washToken: string) {
-    return req<CreateQrSessionResponse>(`/driver/qr/session/create/`, "POST", washToken, {});
+export async function createQrSession() {
+    return req<CreateQrSessionResponse>(`/driver/qr/session/create/`, "POST", {});
 }
 
-export async function cashApprove(token: string, washToken: string) {
-    return req<CashApproveResponse>(`/driver/qr/${encodeURIComponent(token)}/cash/approve/`, "POST", washToken);
+export async function cashApprove(token: string) {
+    return req<CashApproveResponse>(`/driver/qr/${encodeURIComponent(token)}/cash/approve/`, "POST");
 }
 
 // --- POLL (обе стороны) ---
-export async function pollSession(token: string, anyBearer: string | null) {
-    return req<PollResponse>(`/driver/qr/session/${encodeURIComponent(token)}/poll/`, "GET", anyBearer);
+export async function pollSession(token: string) {
+    return req<PollResponse>(`/driver/qr/session/${encodeURIComponent(token)}/poll/`, "GET");
 }
 
 // --- DRIVER (клиент) ---
-export async function scanBooking(token: string, bookingId: number, clientToken: string | null) {
-    return req<ScanResponse>(`/driver/qr/${encodeURIComponent(token)}/scan/`, "POST", clientToken, {
+export async function scanBooking(token: string, bookingId: number) {
+    return req<ScanResponse>(`/driver/qr/${encodeURIComponent(token)}/scan/`, "POST", {
         booking_id: bookingId,
     });
 }
 
-export async function updateExtras(token: string, extraIds: number[], clientToken: string | null) {
-    return req<UpdateExtrasResponse>(`/driver/qr/${encodeURIComponent(token)}/extras/`, "POST", clientToken, {
+export async function updateExtras(token: string, extraIds: number[]) {
+    return req<UpdateExtrasResponse>(`/driver/qr/${encodeURIComponent(token)}/extras/`, "POST", {
         extra_ids: extraIds,
     });
 }
 
-export async function pay(token: string, method: "card" | "cash", clientToken: string | null) {
-    return req<PayResponse>(`/driver/qr/${encodeURIComponent(token)}/pay/`, "POST", clientToken, {
+export async function pay(token: string, method: "card" | "cash") {
+    return req<PayResponse>(`/driver/qr/${encodeURIComponent(token)}/pay/`, "POST", {
         payment_method: method,
     });
 }

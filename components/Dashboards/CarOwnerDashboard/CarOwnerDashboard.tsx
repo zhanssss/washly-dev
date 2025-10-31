@@ -76,7 +76,7 @@ export function CarOwnerDashboard() {
     const [boxSlots, setBoxSlots] = useState<BoxSlotsResponse | null>(null);
     const [loadingSlots, setLoadingSlots] = useState(false);
     const { myBookings, cancelBooking, reload } = useMyBookings();
-    const {user, logout, accessToken} = useAuth();
+    const {user, logout} = useAuth();
     const trpcUtils = trpc.useUtils();
     const updateOwnerMutation = trpc.profile.updateCarOwner.useMutation();
     const uploadPhotoMutation = trpc.profile.uploadPhoto.useMutation();
@@ -222,7 +222,7 @@ export function CarOwnerDashboard() {
         if (token && (fromPoll.length !== union.length || fromPoll.some(id => !union.includes(id)))) {
             try {
                 extrasSavingRef.current = true;
-                const r = await updateExtras(token, union, accessToken);
+                const r = await updateExtras(token, union);
                 if (r?.amount_total) setQrAmount(r.amount_total);
             } catch {}
             finally {
@@ -257,8 +257,8 @@ export function CarOwnerDashboard() {
 
         // 4) если идёт QR-сессия — дёрнем poll разово, чтобы обновить статус
         try {
-            if (qrToken && accessToken) {
-                const s = await pollSession(qrToken, accessToken);
+            if (qrToken) {
+                const s = await pollSession(qrToken);
                 setPollInfo(s);
                 setQrStatus(s?.status ?? null);
                 setQrAmount(s?.amount_total ?? null);
@@ -279,7 +279,7 @@ export function CarOwnerDashboard() {
                 return;
             }
             try {
-                const s = await pollSession(token, accessToken);
+                const s = await pollSession(token);
                 if (!qrActiveRef.current) return;
 
                 setPollInfo(s);
@@ -379,7 +379,7 @@ export function CarOwnerDashboard() {
         extrasSavingRef.current = true;
 
         try {
-            const r = await updateExtras(qrToken, next, accessToken);
+            const r = await updateExtras(qrToken, next);
             if (r?.amount_total) setQrAmount(r.amount_total);
         } catch (e: any) {
             // откат на предыдущее
@@ -398,7 +398,7 @@ export function CarOwnerDashboard() {
         if (!qrToken) return;
         try {
             setIsPaying(true);
-            await pay(qrToken, method, accessToken);
+            await pay(qrToken, method);
             if (method === 'cash') {
                 // сразу в UI даём понять, что ждём кассира
                 setQrStatus('cash_waiting_approval');
@@ -1025,13 +1025,13 @@ export function CarOwnerDashboard() {
         }
 
         try {
-            await scanBooking(token, Number(booking.id), accessToken);
+            await scanBooking(token, Number(booking.id));
             setQrStatus('scanned');
 
             // разовый poll для суммы/допов
             let s: PollResponse | null = null;
             try {
-                s = await pollSession(token, accessToken);
+                s = await pollSession(token);
                 setPollInfo(s);
                 if (s?.status) setQrStatus(s.status);
                 if (s?.amount_total) setQrAmount(s.amount_total);
@@ -1241,18 +1241,11 @@ export function CarOwnerDashboard() {
                         </View>
                     ) : (
                         <View
-                            style={styles.scrollableContent}
-                            contentContainerStyle={[
+                            style={[
+                                styles.scrollableContent,
                                 styles.scrollableContentContainer,
-                                {paddingBottom: (Math.max(insets.bottom, 12) + 64)},
+                                { paddingBottom: Math.max(insets.bottom, 12) + 64 },
                             ]}
-                            refreshControl={
-                                <RefreshControl
-                                    refreshing={refreshing}
-                                    onRefresh={onRefresh}
-                                    tintColor={colors.accent}
-                                />
-                            }
                         >
                             <View style={styles.listContainer}>
                                 <View style={styles.listHeader}>
@@ -1411,7 +1404,6 @@ export function CarOwnerDashboard() {
                 visible={showBooking}
                 insetsTop={insets.top}
                 selectedWash={selectedWash as any}
-                accessToken={accessToken}
                 washDetail={washDetail}
                 boxes={boxes}
                 selectedBoxId={selectedBoxId}
@@ -1612,7 +1604,7 @@ export function CarOwnerDashboard() {
                 onRequestClose={() => setShowNotificationsSettings(false)}
             >
                 <View style={[styles.profileModal, {paddingTop: insets.top}]}>
-                    <View className="profileHeader" style={styles.profileHeader}>
+                    <View style={styles.profileHeader}>
                         <Text style={styles.profileTitle}>УВЕДОМЛЕНИЯ</Text>
                         <TouchableOpacity onPress={() => setShowNotificationsSettings(false)}
                                           style={styles.profileCloseButton}>

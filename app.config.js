@@ -20,8 +20,8 @@ const base = {
         supportsTablet: true,
         bundleIdentifier: "app.washly.carwash",
         infoPlist: {
-            NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera",
-            NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos",
+            NSCameraUsageDescription: "Allow washly to access your camera",
+            NSPhotoLibraryUsageDescription: "Allow washly to access your photos",
             NSLocationWhenInUseUsageDescription:
                 "Нужно, чтобы показывать ближайшие автомойки и строить маршрут.",
         },

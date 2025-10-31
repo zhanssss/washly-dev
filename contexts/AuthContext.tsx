@@ -6,7 +6,8 @@ import {router} from 'expo-router';
 import axios from 'axios';
 import { useAuthStore } from '@/src/stores/authStore';
 import { API_BASE_URL } from '@/src/config/env';
-import { saveRefreshToken, loadRefreshToken, clearRefreshToken, getJwtExp, isExpiring } from '@/src/auth/token';
+import { saveRefreshToken, loadRefreshToken, clearRefreshToken, getJwtExp, isExpiring, saveUserSnapshot, loadUserSnapshot,  saveAccessToken,
+    loadAccessToken, } from '@/src/auth/token';
 
 export interface CarDetails {
     ownerName: string;
@@ -67,6 +68,9 @@ let accessInMemory: string | null = null;
 let accessExpMs: number | null = null;
 function setAccess(token: string | null) {
     accessInMemory = token;
+    const setAccessToken = useAuthStore.getState().setAccessToken;
+    setAccessToken(token); // ← синхронизация со стором
+
     if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         accessExpMs = getJwtExp(token);
@@ -75,6 +79,7 @@ function setAccess(token: string | null) {
         accessExpMs = null;
     }
 }
+
 
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -129,26 +134,66 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         let mounted = true;
         (async () => {
             try {
+                const snap = await loadUserSnapshot<User>();
+                if (snap && mounted) {
+                    setUser(snap);
+                }
+
+                // ⬇️ ДОБАВЬ БЛОК МГНОВЕННОЙ ГИДРАТАЦИИ ACCESS
+                // 1) достаём access из AsyncStorage (или из персист-стора)
+                let hydratedAccess = await loadAccessToken();
+                if (!hydratedAccess) {
+                    const fromStore = useAuthStore.getState().accessToken; // zustand-persist
+                    if (fromStore) hydratedAccess = fromStore;
+                }
+                // 2) если есть и не истекает — настраиваем axios/память
+                if (hydratedAccess) {
+                    const exp = getJwtExp(hydratedAccess);
+                    if (!isExpiring(exp)) {
+                        setAccess(hydratedAccess);
+                    }
+                }
+
                 const r = await loadRefreshToken();
-                if (!r) return; // нет refresh — останемся на экранах входа
+                if (!r) {
+                    // refresh нет — но если setAccess выше уже сработал, попробуем дернуть /me
+                    if (accessInMemory) {
+                        try {
+                            const me = await api.get(CLIENT_ME_URL);
+                            const mapped = mapOwnerMeToUser(me.data);
+                            if (mounted) {
+                                setUser(mapped);
+                                await saveUserSnapshot(mapped);
+                            }
+                        } catch {
+                            try {
+                                const me2 = await api.get(WASHER_ME_URL);
+                                const mapped2 = mapWasherMeToUser(me2.data);
+                                if (mounted) {
+                                    setUser(mapped2);
+                                    await saveUserSnapshot(mapped2);
+                                }
+                            } catch { /* останемся неавторизованы */ }
+                        }
+                    }
+                    return; // ⬅️ важный ранний выход: не трогаем refresh-логику ниже
+                }
 
-                // Получим свежий access в память:
+                // Был refresh → обычный поток: получим свежий access и затем /me
                 await ensureFreshAccess();
-
-                // Подтянем профиль: сначала клиент, потом автомойка (или наоборот — по продуктовой логике)
                 try {
                     const me = await api.get(CLIENT_ME_URL);
                     const mapped = mapOwnerMeToUser(me.data);
                     if (mounted) {
                         setUser(mapped);
-                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                        await saveUserSnapshot(mapped);
                     }
                 } catch {
                     const me = await api.get(WASHER_ME_URL);
                     const mapped = mapWasherMeToUser(me.data);
                     if (mounted) {
                         setUser(mapped);
-                        await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                        await saveUserSnapshot(mapped);
                     }
                 }
             } finally {
@@ -162,6 +207,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const saveTokens = useCallback(async (access?: string | null, refresh?: string | null) => {
         if (access) setAccess(access);
+        if (typeof access !== 'undefined') {
+            await saveAccessToken(access); // null → удалит, string → сохранит
+        }
         if (refresh) await saveRefreshToken(refresh);
     }, []);
 
@@ -286,7 +334,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const meResp = await api.get(CLIENT_ME_URL);
                 const mapped = mapOwnerMeToUser(meResp.data);
                 setUser(mapped);
-                await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                await saveUserSnapshot(mapped);
                 setAuthStep('complete');
                 setPendingPhone('');
                 router.replace('/car-owner'); // оставил твой прежний роут
@@ -294,7 +342,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                 const meResp = await api.get(WASHER_ME_URL);
                 const mapped = mapWasherMeToUser(meResp.data);
                 setUser(mapped);
-                await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                await saveUserSnapshot(mapped);
                 setAuthStep('complete');
                 setPendingPhone('');
                 router.replace('/car-wash');
@@ -401,7 +449,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             const meResp = await api.get('/client/me/'); // Authorization уже подставится
             const mapped = mapOwnerMeToUser(meResp.data);
             setUser(mapped);
-            await AsyncStorage.setItem('user', JSON.stringify(mapped));
+            await saveUserSnapshot(mapped);
             router.replace('/car-owner');
             return {success: true};
         } catch (err: any) {
@@ -467,7 +515,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const meResp = await api.get(CLIENT_ME_URL);
                     const mapped = mapOwnerMeToUser(meResp.data);
                     setUser(mapped);
-                    await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    await saveUserSnapshot(mapped);
                     setAuthStep('complete');
                     router.replace('/car-owner');
                     return { success: true, user: mapped };
@@ -475,7 +523,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const meResp = await api.get(WASHER_ME_URL);
                     const mapped = mapWasherMeToUser(meResp.data);
                     setUser(mapped);
-                    await AsyncStorage.setItem('user', JSON.stringify(mapped));
+                    await saveUserSnapshot(mapped);
                     setAuthStep('complete');
                     router.replace('/car-wash');
                     return { success: true, user: mapped };
@@ -554,7 +602,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const logout = useCallback(async () => {
         try {
             await clearTokens();
-            await AsyncStorage.removeItem('user');
+            await saveUserSnapshot(null);
+            await saveAccessToken(null);
             setUser(null);
             setPendingPhone('');
             setShowCode(false);
@@ -563,6 +612,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             setAuthStep('phone');
             setCurrentVerificationCode('');
             useAuthStore.getState().clearAuth();
+            useAuthStore.getState().setAccessToken(null);
             router.replace('/');
         } catch (error) {
             console.log('Error logging out:', error);

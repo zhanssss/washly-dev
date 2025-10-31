@@ -45,7 +45,6 @@ const mapDto = (dto: DriverMyBookingDto): MyBooking => {
 // useMyBookings.ts
 export function useMyBookings() {
     const [myBookings, setMyBookings] = useState<MyBooking[]>([]);
-    const accessToken = useAuthStore((s) => s.accessToken as string | null);
 
     const load = useCallback(async (token?: string | null) => {
         if (!token) { setMyBookings([]); return [] as MyBooking[]; }
@@ -71,19 +70,18 @@ export function useMyBookings() {
         }
     }, []);
 
-    useEffect(() => { load(accessToken); }, [accessToken, load]);
+    useEffect(() => { load(); }, [ load]);
 
     const cancelBooking = useCallback(async (id: string) => {
-        if (!accessToken) return;
         try {
-            await cancelDriverBooking(id, accessToken);
-            await load(accessToken);
+            await cancelDriverBooking(id);
+            await load();
         } catch (e) {
             console.warn('cancel booking failed', e);
         }
-    }, [accessToken, load]);
+    }, [load]);
 
-    const reload = useCallback(() => load(accessToken), [load, accessToken]); // 👈 теперь Promise<MyBooking[]>
+    const reload = useCallback(() => load(), [load]); // 👈 теперь Promise<MyBooking[]>
 
     return { myBookings, cancelBooking, reload };
 }

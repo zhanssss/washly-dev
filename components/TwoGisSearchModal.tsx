@@ -191,7 +191,7 @@ export default function MapModal({
                     onMessage={onMessage}
                     javaScriptEnabled
                     domStorageEnabled
-                    // FIX: иногда переходы по внутренним ссылкам мешают postMessage
+
                     onShouldStartLoadWithRequest={() => true}
                     style={{ flex: 1 }}
                 />

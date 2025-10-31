@@ -46,7 +46,7 @@ type Params = {
     box_ids?: number[];
 };
 
-export async function fetchDashboardStats(token: string, params?: Params) {
+export async function fetchDashboardStats(token: Params | { preset: string }, params?: Params) {
     const res = await axios.get<DashboardStatsResponse>(`${API_BASE_URL}/dashboard/stats/`, {
         headers: { Authorization: `Bearer ${token}` },
         // было: params ?? { preset: "today" }

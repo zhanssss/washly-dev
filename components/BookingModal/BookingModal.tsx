@@ -71,7 +71,6 @@ type Props = {
     visible: boolean;
     insetsTop: number;
     selectedWash: MinimalWash | null;
-    accessToken?: string | null;
 
     // данные по автомойке/боксам/слотам
     washDetail: CarWashDetail | null;
@@ -104,7 +103,6 @@ export default function BookingModal({
                                          visible,
                                          insetsTop,
                                          selectedWash,
-                                         accessToken,
                                          washDetail,
                                          boxes,
                                          selectedBoxId,
@@ -144,7 +142,7 @@ export default function BookingModal({
         const extra_services = Array.isArray(selectedExtras) ? selectedExtras : [];
 
         if (!Number.isFinite(slot_index)) return Alert.alert('Ошибка', 'Не удалось определить slot_index.');
-        if (!Number.isFinite(client)) return Alert.alert('Ошибка', 'Не удалось определить пользователя (client). Войдите в аккаунт.');
+        if (!Number.isFinite(client)) return Alert.alert('Ошибка', `Не удалось определить пользователя ${client}. Войдите в аккаунт.`);
         if (!Number.isFinite(car_body)) return Alert.alert('Ошибка', 'Не выбран тип кузова.');
 
         const payload: CreateBookingPayload = {
@@ -160,7 +158,7 @@ export default function BookingModal({
         try {
             setSubmitting(true);
             lastPayloadRef.current = payload;
-            await createBooking(payload, accessToken || undefined);
+            await createBooking(payload);
 
             Alert.alert('Запись создана', `Мойка: ${selectedWash.name}\nСумма: ${total_price.toLocaleString()} ₸`);
             await onReloadSlots(Number(selectedWash.id), selectedBoxId, bookingDate);
@@ -204,15 +202,14 @@ export default function BookingModal({
 
             // 1) сперва отменяем старую бронь
             if (oldId) {
-                await cancelDriverBooking(oldId, accessToken || undefined);
+                await cancelDriverBooking(oldId);
             }
 
             // 2) потом создаём новую
             const payload = { ...lastPayloadRef.current };
             delete (payload as any).replace_existing; // на всякий случай
 
-            await createBooking(payload, accessToken || undefined);
-
+            await createBooking(payload);
             setReplaceVisible(false);
             setConflict(null);
             Alert.alert('Готово', 'Время перенесено');

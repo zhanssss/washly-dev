@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { API_BASE_URL } from "@/src/config/env";
+import { api } from "@/contexts/AuthContext";
+
 
 type CarBody = { id: number; name: string };
 type ExtraService = { id: number; name: string };
@@ -10,7 +11,7 @@ type ReferenceState = {
     extraServices: ExtraService[];
     loading: boolean;
     error: string | null;
-    load: (accessToken?: string | null) => Promise<void>;
+    load: () => Promise<void>;
 };
 
 export const useReferenceData = create<ReferenceState>()(
@@ -21,27 +22,20 @@ export const useReferenceData = create<ReferenceState>()(
             loading: false,
             error: null,
 
-            load: async (accessToken) => {
+            load: async () => {
                 set({ loading: true, error: null });
                 try {
-                    const res = await fetch(`${API_BASE_URL}/dashboard/reference-data/`, {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                        },
-                    });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const json: {
+                    const { data: json } = await api.get<{
                         extra_services: { service_id: number; service_name: string }[];
                         car_body_types: { body_id: number; name: string }[];
-                    } = await res.json();
+                    }>("/dashboard/reference-data/");
 
                     // нормализуем под UI: name — подпись, id — значение
                     const carBodyTypes: CarBody[] =
-                        (json.car_body_types || []).map((b) => ({ id: b.body_id, name: b.name }));
+                        (json.car_body_types || []).map((b: { body_id: number; name: string; }) => ({ id: b.body_id, name: b.name }));
 
                     const extraServices: ExtraService[] =
-                        (json.extra_services || []).map((s) => ({ id: s.service_id, name: s.service_name }));
+                        (json.extra_services || []).map((s: { service_id: number; service_name: string; }) => ({ id: s.service_id, name: s.service_name }));
 
                     set({ carBodyTypes, extraServices, loading: false });
                 } catch (e: any) {

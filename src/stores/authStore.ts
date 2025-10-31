@@ -87,6 +87,10 @@
         setAuthUser: (u: Nullable<User>) => void;
         clearAuth: () => void;
 
+        accessToken: string | null;
+
+        setAccessToken: (t: string | null) => void;
+
         // raw client profile
         setClientMe: (raw: ClientMe) => void;
         clearClientMe: () => void;
@@ -111,9 +115,11 @@
             (set, get) => ({
                 user: null,
                 clientMe: null,
+                accessToken: null,
                 setAuthUser: (u) => set({ user: u }),
-                clearAuth:   () => set({ user: null, clientMe: null }),
+                setAccessToken: (t) => set({ accessToken: t }),
 
+                clearAuth:   () => set({ user: null, clientMe: null, accessToken: null }),
                 setClientMe: (raw) => set({ clientMe: raw }),
                 clearClientMe: () => set({ clientMe: null }),
 
@@ -149,18 +155,20 @@
             {
                 name: 'auth-store',
                 storage: createJSONStorage(() => AsyncStorage),
-                version: 3,
+                version: 4,
                 partialize: (s) => ({
                     user: s.user,
                     clientMe: s.clientMe,
+                    accessToken: s.accessToken,
                 }),
                 migrate: async (persisted: any) => {
-                    if (persisted) {
-                        delete persisted.accessToken;
-                        delete persisted.refreshToken;
+                    // Больше не удаляем accessToken: он нужен для мгновенной гидратации
+                    if (persisted && typeof persisted.accessToken === 'undefined') {
+                        persisted.accessToken = null;
                     }
                     return persisted;
                 },
+
             }
         )
     );

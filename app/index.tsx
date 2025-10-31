@@ -1,70 +1,34 @@
-// app/index/index.tsx
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text } from 'react-native';
-import { SafeAreaView  } from "react-native-safe-area-context";
-
-import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import AuthScreen from '@/components/AuthScreen/AuthScreen';
-import CarWashRegistration from '@/components/Registration/CarWashRegistration/CarWashRegistration';
-import {styles} from '@/assets/styles/index.styles'
+import { styles } from '@/assets/styles/index.styles';
+import AuthScreen from "@/components/AuthScreen/AuthScreen";
 
-export default function WelcomeScreen() {
-  const { user, isLoading, needsCarDetails, needsCarWashDetails, authStep } = useAuth();
+export default function Index() {
+    const { user, isLoading, needsCarDetails, needsCarWashDetails } = useAuth();
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (needsCarDetails) {
-        // Пользователь прошел верификацию, но нужно заполнить данные об авто
-        router.replace('/car-registration');
-        return;
-      }
-      
-      if (needsCarWashDetails) {
-        // Пользователь прошел верификацию, но нужно заполнить данные об автомойке
-        // Показываем форму регистрации автомойки прямо здесь
-        return;
-      }
-      
-      if (user && authStep === 'complete') {
-        // Полностью зарегистрированный пользователь
-        if (user.type === 'car-owner') {
-          router.replace('/car-owner');
-        } else if (user.type === 'car-wash') {
-          router.replace('/car-wash');
-        }
-      }
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={[styles.content, { justifyContent: 'center' }]}>
+                    <Text style={styles.loadingText}>Загрузка...</Text>
+                </View>
+            </SafeAreaView>
+        );
     }
-  }, [user, isLoading, needsCarDetails, needsCarWashDetails, authStep]);
 
-  // Always call hooks in the same order - render conditionally based on state
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={[styles.content, { justifyContent: 'center' }]}>
-          <Text style={styles.loadingText}>Загрузка...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  
-  // Показываем форму регистрации автомойки если нужно
-  if (needsCarWashDetails) {
-    return <CarWashRegistration />;
-  }
+    if (needsCarDetails) {
+        return <Redirect href="/car-registration" />;
+    }
 
-  // Показываем экран аутентификации если пользователь не авторизован
-  if (!user || authStep !== 'complete') {
-    return <AuthScreen />;
-  }
+    if (user) {
+        return user.type === 'car-owner'
+            ? <Redirect href="/car-owner" />
+            : <Redirect href="/car-wash" />;
+    }
 
-  // Этот код не должен выполняться, но оставляем для безопасности
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { justifyContent: 'center' }]}>
-        <Text style={styles.loadingText}>Перенаправление...</Text>
-      </View>
-    </SafeAreaView>
-  );
+    // 5) Не авторизован → на стек авторизации
+    return <AuthScreen/>;
 }
-

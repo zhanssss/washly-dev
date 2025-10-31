@@ -1,6 +1,6 @@
 // src/services/api/carWashesApi.ts
 import { API_BASE_URL } from "@/src/config/env";
-
+import { useAuthStore } from "@/src/stores/authStore";
 // ---------- БАЗОВЫЕ ТИПЫ ----------
 export type BackendCarWash = {
     id: number;
@@ -274,7 +274,8 @@ export async function createBooking(
 }
 
 // (опционально, если нужно владельцу мойки смотреть брони)
-export async function fetchDashboardBookings(carWashId: number, accessToken: string) {
+export async function fetchDashboardBookings(carWashId: number) {
+    const accessToken = useAuthStore.getState().accessToken;
     const res = await fetch(`${API_BASE_URL}/dashboard/bookings/`, {
         headers: { Authorization: `Bearer ${accessToken}` },
     });

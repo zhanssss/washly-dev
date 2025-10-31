@@ -1,10 +1,33 @@
 // src/auth/token.ts
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { decode as atob } from 'base-64';
 
 const KEY_REFRESH = 'refreshToken_v2';
+const KEY_ACCESS = 'accessToken_v2';
+const KEY_USER   = 'userSnapshot_v1';
+
+
+export async function saveAccessToken(access: string | null) {
+    if (!access) { await AsyncStorage.removeItem(KEY_ACCESS); return; }
+    await AsyncStorage.setItem(KEY_ACCESS, access);
+}
+
+export async function loadAccessToken(): Promise<string | null> {
+    return AsyncStorage.getItem(KEY_ACCESS);
+}
+export async function saveUserSnapshot(user: any | null) {
+    if (!user) { await AsyncStorage.removeItem(KEY_USER); return; }
+    await AsyncStorage.setItem(KEY_USER, JSON.stringify(user));
+}
+
+export async function loadUserSnapshot<T = any>(): Promise<T | null> {
+    const raw = await AsyncStorage.getItem(KEY_USER);
+    if (!raw) return null;
+    try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
 
 export async function saveRefreshToken(refresh: string) {
     try {

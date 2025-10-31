@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ActiveBookingsList from '@/components/Dashboards/CarWashDashboard/BookingAnalytics/ActiveBookingList';
 import {fetchDashboardStats, type DashboardStatsResponse} from '@/src/services/api/dashboardApi';
-import {API_BASE_URL, GIS_API_KEY} from '@/src/config/env';
+import { GIS_API_KEY} from '@/src/config/env';
 import { buildStatsExportUrl, type StatsKind, type ExportFormat } from '@/src/services/api/exportsApi';
 import { downloadAndShare } from '@/src/utils/download';
 
@@ -41,7 +41,7 @@ import {
     Minus,
     Upload, CoinsIcon,
 } from 'lucide-react-native';
-import {useAuth} from '@/contexts/AuthContext';
+import {api, useAuth} from '@/contexts/AuthContext';
 import {useVisits, type Booking, type HourlyData} from '@/contexts/VisitsContext';
 import QRCode from '@/components/QR/QRCode';
 import {carWashesAlmaty} from '@/src/data/carWashes';
@@ -50,8 +50,15 @@ import BookingsAnalytics from '@/components/Dashboards/CarWashDashboard/BookingA
 import {fetchDashboardBookings} from '@/src/services/api/carWashesApi';
 import {
     createQrSession, pollSession, cashApprove,
-    type CreateQrSessionResponse, type PollResponse
+    type CreateQrSessionResponse
 } from '@/src/services/api/qrApi';
+
+
+// @ts-ignore
+import placeholderPhoto1 from '@/assets/images/placeholders/landscape.svg'
+
+import TwoGisSearchModal from '@/components/TwoGisSearchModal';
+import {useReferenceData} from '@/src/stores/useReferenceData';
 
 type DashboardBooking = {
     id: number;
@@ -69,13 +76,6 @@ type DashboardBooking = {
     created_at: string;        // ISO с +05:00
 };
 
-
-// @ts-ignore
-import placeholderPhoto1 from '@/assets/images/placeholders/landscape.svg'
-
-/* =========================================================
-   ===============  КОМПОНЕНТЫ ВНУТРЕННИЕ  =================
-   ========================================================= */
 
 interface BookingsTrackerProps {
     carWashId: string;
@@ -157,10 +157,6 @@ function BookingsTracker({
                              carWashId,
                              selectedDate,
                              selectedFilter,
-                             showFilters,
-                             onDateChange,
-                             onFilterChange,
-                             onToggleFilters,
                          }: BookingsTrackerProps) {
     const {getBookingsByDate, getHourlyBookings} = useVisits();
     const {user} = useAuth();
@@ -283,12 +279,8 @@ function BookingsTracker({
 type BodyType = { id: string; name: string };
 type BaseService = { id: string; name: string };
 
-import TwoGisSearchModal from '@/components/TwoGisSearchModal';
-import {useReferenceData} from '@/src/stores/useReferenceData';
-
 function CarWashAdminScreen() {
     const user = useAuthStore(s => s.user);
-    const accessToken = useAuthStore(s => s.accessToken);
     const placeholderPhoto = placeholderPhoto1;
 // стейты
     const [twoGisPlaceId, setTwoGisPlaceId] = useState<string | null>(null);
@@ -402,8 +394,8 @@ function CarWashAdminScreen() {
     } = useReferenceData();
 
     useEffect(() => {
-        loadRefs(accessToken);
-    }, [accessToken, loadRefs]);
+        loadRefs();
+    }, [loadRefs]);
 
     useEffect(() => {
         setBodyTypes(carBodyTypes.map((b) => ({id: String(b.id), name: b.name})));
@@ -417,13 +409,8 @@ function CarWashAdminScreen() {
         const fetchCarWash = async () => {
             try {
                 if (!user?.id) return;
-                const res = await fetch(`${API_BASE_URL}/dashboard/carwashes/${user.id}/`, {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                    },
-                });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
+                const res = await api.get(`/dashboard/carwashes/${user.id}/`);
+                const data = res.data;
 
                 // Заполняем стейты только если значение реально есть
                 if (data.name) setPlaceTitle(data.name);
@@ -460,7 +447,7 @@ function CarWashAdminScreen() {
         };
 
         fetchCarWash();
-    }, [user?.id, accessToken]);
+    }, [user?.id,]);
 
 
     const [bodyTypes, setBodyTypes] = useState<{ id: string; name: string }[]>([]);
@@ -669,27 +656,22 @@ function CarWashAdminScreen() {
         });
 
         try {
-            const res = await fetch(`${API_BASE_URL}/dashboard/carwash/setup/`, {
-                method: 'POST',
-                headers: {
-                    ...(accessToken ? {Authorization: `Bearer ${accessToken}`} : {}),
-                },
-                body: form,
-            });
-
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                const msg = typeof data === 'object' && data ? JSON.stringify(data) : '';
-                throw new Error(`HTTP ${res.status} ${msg}`);
-            }
+            const res = await api.postForm(`/dashboard/carwash/setup/`, form);
+            const data = res?.data ?? {};
 
             if (data?.img) {
-                // бэк вернул абсолютный URL — подменим превью на серверный
                 setPlacePhotoUrl(String(data.img));
             }
             Alert.alert('Сохранено', 'Настройки автомойки обновлены');
+
         } catch (e: any) {
-            Alert.alert('Ошибка сохранения', e?.message ?? 'Не удалось сохранить');
+            const msg =
+                e?.response?.data?.detail ||
+                e?.response?.data?.message ||
+                (typeof e?.response?.data === 'string' ? e.response.data : '') ||
+                e?.message ||
+                'Не удалось сохранить';
+            Alert.alert('Ошибка сохранения', String(msg));
         }
     };
 
@@ -953,9 +935,6 @@ export default function CarWashDashboard() {
     const [statsKind, setStatsKind] = useState<StatsKind>('day');
     const currentYear = new Date().getFullYear();
 
-    // accessToken из стора (если ещё не взял)
-    const accessToken = useAuthStore(s => s.accessToken);
-
     // --- QR session state ---
     const [qrLoading, setQrLoading] = useState(false);
     const [qrError, setQrError] = useState<string | null>(null);
@@ -1002,12 +981,12 @@ export default function CarWashDashboard() {
         useState<Parameters<typeof fetchDashboardStats>[1] | undefined>({ kind: 'day' });
 
     const loadDashboardStats = async (p?: Parameters<typeof fetchDashboardStats>[1]) => {
-        if (!accessToken) return;
+
         try {
             setDashLoading(true);
             const params = p ?? lastStatsParams ?? {preset: 'today'};
             setLastStatsParams(params);
-            const data = await fetchDashboardStats(accessToken, params);
+            const data = await fetchDashboardStats(params);
             setDashStats(data);
         } finally {
             setDashLoading(false);
@@ -1049,7 +1028,7 @@ export default function CarWashDashboard() {
         if (selectedTab === 'dashboard') {
             loadDashboardStats({kind: 'day'});
         }
-    }, [selectedTab, accessToken]);
+    }, [selectedTab]);
 
     useEffect(() => {
         if (selectedTab === 'dashboard') {
@@ -1058,7 +1037,7 @@ export default function CarWashDashboard() {
             setStatsTo(today);
             loadDashboardStats({kind: 'custom', start: isoKZ(today), end: isoKZ(today)});
         }
-    }, [selectedTab, accessToken]);
+    }, [selectedTab]);
 
     const {refreshing, onRefresh} = usePullToRefresh([
         refreshCarWash,
@@ -1068,7 +1047,7 @@ export default function CarWashDashboard() {
         stopPoll();
         const tick = async () => {
             try {
-                const s = await pollSession(token, accessToken);
+                const s = await pollSession(token);
                 setQrStatus(s.status || 'initiated');
                 // здесь можешь ещё отобразить сумму/допы, если надо администратору
             } catch {
@@ -1081,10 +1060,9 @@ export default function CarWashDashboard() {
     React.useEffect(() => () => stopPoll(), []);
 
     const createSession = async () => {
-        if (!accessToken) return;
         setQrCreating(true);
         try {
-            const s = await createQrSession(accessToken);
+            const s = await createQrSession();
             setQrToken(s.token);
             setQrUrl(s.qr_url);             // типа "washly://qr/<token>"
             setQrStatus(s.status);          // "initiated"
@@ -1111,10 +1089,10 @@ export default function CarWashDashboard() {
     const [approving, setApproving] = React.useState(false);
 
     const approveCash = async () => {
-        if (!qrToken || !accessToken || approving) return;
+        if (!qrToken || approving) return;
         try {
             setApproving(true);
-            await cashApprove(qrToken, accessToken);
+            await cashApprove(qrToken);
             // Опционально сразу обновим статус локально, а poll подхватит окончательно:
             setQrStatus('paid');
             Alert.alert('Готово', 'Оплата наличными подтверждена');
@@ -1167,10 +1145,7 @@ export default function CarWashDashboard() {
 
 
     const generateQrSession = async () => {
-        if (!accessToken) {
-            setQrError('Нет токена автомойки');
-            return;
-        }
+
 
         setQrLoading(true);
         setQrError(null);
@@ -1178,7 +1153,7 @@ export default function CarWashDashboard() {
         cleanupTimers(); // 👈 не накапливаем таймеры
 
         try {
-            const s = await createQrSession(accessToken);
+            const s = await createQrSession();
             setQrToken(s.token || null);
             setQrUrl(s.qr_url || null);
             setQrExpiresAt(s.expires_at || null);
@@ -1206,7 +1181,7 @@ export default function CarWashDashboard() {
         }
 
         return () => cleanupTimers(); // safety на анмаунте
-    }, [selectedTab, accessToken]);
+    }, [selectedTab]);
 
     const stopExportPolling = () => {
         if (exportPollRef.current) {
@@ -1217,7 +1192,6 @@ export default function CarWashDashboard() {
     useEffect(() => () => stopExportPolling(), []);
 
     const handleExport = async (format: ExportFormat) => {
-        if (!accessToken) return Alert.alert('Экспорт', 'Нет токена');
         try {
             setExporting(true);
 
@@ -1236,7 +1210,7 @@ export default function CarWashDashboard() {
                 filename = `stats_${statsKind}.${format}`;
             }
 
-            await downloadAndShare(url, filename, { Authorization: `Bearer ${accessToken}` });
+            await downloadAndShare(url, filename);
             Alert.alert('Готово', 'Файл сохранён/поделен.');
         } catch (e: any) {
             Alert.alert('Экспорт', e?.message ?? 'Не удалось скачать файл');
@@ -1274,10 +1248,10 @@ export default function CarWashDashboard() {
         new Date(iso).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit', timeZone: KZ_TZ});
 
     const loadDashBookings = async () => {
-        if (!user?.id || !accessToken) return;
+        if (!user?.id) return;
         try {
             setLoadingDashBookings(true);
-            const data = await fetchDashboardBookings(Number(user.id), accessToken);
+            const data = await fetchDashboardBookings(Number(user.id));
             setDashBookings(Array.isArray(data) ? data : []);
         } catch (e) {
             console.log('fetchDashboardBookings error', e);
@@ -1291,7 +1265,7 @@ export default function CarWashDashboard() {
         loadDashBookings();
         const id = setInterval(loadDashBookings, 30000);
         return () => clearInterval(id);
-    }, [selectedTab, user?.id, accessToken]);
+    }, [selectedTab, user?.id]);
 
     const todayKey = dateKeyKZ(new Date());
     const todayBookings = useMemo(

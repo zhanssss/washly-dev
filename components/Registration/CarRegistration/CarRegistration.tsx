@@ -30,13 +30,12 @@ export default function CarRegistration() {
     const [isLoading, setIsLoading] = useState(false);
 
     const {registerDriver, tempPhone} = useAuth();
-    const accessToken = useAuthStore((s) => s.accessToken);
 
     const {carBodyTypes, loading: refLoading, error: refError, load: loadRefs} = useReferenceData();
 
     useEffect(() => {
-        loadRefs(accessToken);
-    }, [accessToken, loadRefs]);
+        loadRefs();
+    }, [loadRefs]);
 
     useEffect(() => {
         if (!refLoading && carBodyTypes.length && bodyTypeId == null) setBodyTypeId(carBodyTypes[0].id);

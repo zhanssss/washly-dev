@@ -18,7 +18,7 @@ type Props = {
 };
 
 const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
-    const { user, accessToken, setUser } = useAuth();
+    const { user, setUser } = useAuth();
     const insets = useSafeAreaInsets();
 
     const { carBodyTypes, load, loading: refLoading } = useReferenceData();
@@ -73,7 +73,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
 
     useEffect(() => {
         if (!visible) return;
-        if (!carBodyTypes.length) load(accessToken || undefined);
+        if (!carBodyTypes.length) load();
     }, [visible]);
 
     useEffect(() => {
