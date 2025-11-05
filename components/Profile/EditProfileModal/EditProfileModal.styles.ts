@@ -63,7 +63,7 @@ export const styles = StyleSheet.create({
     label: {
         fontSize: 12,
         color: colors.mutedText,
-        marginBottom: 6,
+        marginBottom: 12,
     },
 
     input: {
@@ -112,6 +112,7 @@ export const styles = StyleSheet.create({
     },
 
     actions: {
+        marginTop:36,
         gap: 10,
     },
     primaryButton: {
@@ -137,4 +138,44 @@ export const styles = StyleSheet.create({
 
     // небольшие утилки
     spacer12: { height: 12 },
+
+    colorGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        rowGap: 12,
+        marginBottom: 16,
+    },
+    colorDotWrap: {
+        width: 68,
+        alignItems: 'center',
+    },
+    colorDotWrapActive: {
+        transform: [{ scale: 1.04 }],
+    },
+    colorDotActive: {
+        borderColor: colors.primary,
+        borderWidth: 1,
+        transform: [{ scale: 1.04 }],
+    },
+    colorDot: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+        // тень для iOS/Android
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+        marginBottom: 6,
+    },
+    colorName: {
+        fontSize: 12,
+        color: '#4B5563',
+        maxWidth: 68,
+        textAlign: 'center',
+    },
 });

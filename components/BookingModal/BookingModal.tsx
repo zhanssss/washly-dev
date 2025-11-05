@@ -254,7 +254,7 @@ export default function BookingModal({
                     <ScrollView style={styles.bookingContent} showsVerticalScrollIndicator={false}>
                         {/* шапка автомойки */}
                         <View style={styles.bookingCarWashInfo}>
-                            <Image source={{uri: selectedWash.image}} style={styles.bookingCarWashImage}/>
+                            <Image  style={styles.bookingCarWashImage}/>
                             <View style={styles.bookingCarWashDetails}>
                                 <Text style={styles.bookingCarWashName}>{selectedWash.name}</Text>
 

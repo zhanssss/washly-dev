@@ -33,11 +33,12 @@ type ClientMe = {
     role: 'client' | 'washer';
     registered_at: string;
     car_number: string;
-    car_body: string;     // приходит строкой "2"
+    car_body: number;
     last_wash: string | null;
 };
 
 export interface CarWashDetails {
+    id: number;
     name: string;
     address: string;
     phone: string;
@@ -52,6 +53,7 @@ export interface CarWashDetails {
     };
 }
 
+
 export interface User {
     id: string;
     phone: string;
@@ -59,10 +61,20 @@ export interface User {
     name?: string;
     isVerified: boolean;
     password?: string;
+
+    username?: string;
+    registered_at?: string;
+    last_wash?: string | null;
+    car_number?: string;
+    car_body?: number | string;
+    brand?: number | null;
+    city?: number | null;
+    color?: number | null;
+    car_model?: string;
+
     carDetails?: CarDetails;
     carWashDetails?: CarWashDetails;
 }
-
 // AuthContext.tsx
 export const api = axios.create({
     baseURL: `${API_BASE_URL}/api`,
@@ -80,16 +92,20 @@ let accessExpMs: number | null = null;
 function setAccess(token: string | null) {
     accessInMemory = token;
     const setAccessToken = useAuthStore.getState().setAccessToken;
-    setAccessToken(token); // ← синхронизация со стором
+    setAccessToken(token);
 
     if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // ↓ для эндпоинтов, где ждут именно Auth-token
+        (api.defaults.headers.common as any)['Auth-token'] = token;
         accessExpMs = getJwtExp(token);
     } else {
         delete api.defaults.headers.common['Authorization'];
+        delete (api.defaults.headers.common as any)['Auth-token'];
         accessExpMs = null;
     }
 }
+
 
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -416,12 +432,26 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         phone: me.phone,
         type: 'car-owner',
         isVerified: true,
+
+        // плоские поля как есть из /client/me
+        username: me.username,
+        registered_at: me.registered_at,
+        last_wash: me.last_wash ?? null,
+        car_number: me.car_number,
+        car_body: me.car_body,     // может быть "2" строкой
+        brand: me.brand ?? null,
+        city: me.city ?? null,
+        color: me.color ?? null,
+        car_model: me.car_model ?? '',
+
+        // совместимость со старым UI
         carDetails: {
             ownerName: '',
             licensePlate: me.car_number,
-            brand: '',
-            model: '',
-            bodyType: toBodyName(me.car_body), // ← ключевая строка
+            brand: '',   // при желании можешь подтянуть имя бренда из справочника
+            model: me.car_model ?? '',
+            bodyType: toBodyName(me.car_body),
+            // color: — имя, если понадобится, можно сопоставить из справочника
         },
     });
 
@@ -432,6 +462,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         type: 'car-wash',
         isVerified: true,
         carWashDetails: {
+            id: me.car_id,
             name: me.name ?? '',
             address: me.address ?? '',
             phone: me.phone ?? '',

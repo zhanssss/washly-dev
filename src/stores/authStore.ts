@@ -10,12 +10,18 @@
         role: 'client' | 'washer';
         registered_at: string;
         car_number: string;
-        car_body: string;            // сервер шлёт как строку ("2")
+        car_body: number;
         last_wash: string | null;
+
+        // ↓ новые поля, которые приходят в /client/me
+        username?: string;
+        brand?: number | null;
+        city?: number | null;
+        color?: number | null;
+        car_model?: string;
     };
 
-    // 👇 если типы уже объявлены в AuthContext — можешь импортировать оттуда.
-    // Здесь оставляю дубликаты для изоляции.
+
     export interface CarWashDetails {
         id: number;
         name: string;
@@ -43,9 +49,21 @@
         name?: string;
         isVerified: boolean;
         password?: string;
+
+        username?: string;
+        registered_at?: string;
+        last_wash?: string | null;
+        car_number?: string;
+        car_body?: number | string;
+        brand?: number | null;
+        city?: number | null;
+        color?: number | null;
+        car_model?: string;
+
         carDetails?: CarDetails;
         carWashDetails?: CarWashDetails;
     }
+
 
     type Nullable<T> = T | null;
 
@@ -85,7 +103,7 @@
         user: Nullable<User>;
         clientMe: Nullable<ClientMe>;
 
-        setAuthUser: (u: Nullable<User>) => void;
+        setAuthUser: (u: User) => void;
         clearAuth: () => void;
 
         accessToken: string | null;
@@ -103,7 +121,7 @@
         // селекторы по клиенту (удобно для payload-ов)
         getClientId: () => number | null;
         getClientCarNumber: () => string;
-        getClientCarBody: () => string | null;
+        getClientCarBody: () => number | null;
 
         // телефон
         updateUserPhoneFromInput: (input: string) => void;
@@ -146,7 +164,10 @@
                 },
 
                 getClientCarNumber: () => get().clientMe?.car_number ?? '',
-                getClientCarBody: () => get().clientMe?.car_body ?? null,
+                getClientCarBody: () => {
+                    const v = get().clientMe?.car_body;
+                    return typeof v === 'number' ? v : null;
+                },
 
                 // === ТЕЛЕФОН ===
                 updateUserPhoneFromInput: (input: string) => {

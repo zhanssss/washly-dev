@@ -1273,7 +1273,7 @@ export function CarOwnerDashboard() {
                                                     <Text style={styles.nearestBadgeText}>БЛИЖАЙШАЯ</Text>
                                                 </View>
                                             )}
-                                            <Image source={{uri: carWash.image}} style={styles.carWashImage}/>
+                                            <Image style={styles.carWashImage}/>
                                             <View style={styles.cardContent}>
                                                 <Text style={styles.carWashName}>{carWash.name}</Text>
                                                 <View style={styles.cardMetrics}>

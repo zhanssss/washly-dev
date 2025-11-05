@@ -18,8 +18,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import ActiveBookingsList from '@/components/Dashboards/CarWashDashboard/BookingAnalytics/ActiveBookingList';
 import {fetchDashboardStats, type DashboardStatsResponse} from '@/src/services/api/dashboardApi';
 import {API_BASE_URL, GIS_API_KEY} from '@/src/config/env';
-import { buildStatsExportUrl, type StatsKind, type ExportFormat } from '@/src/services/api/exportsApi';
-import { downloadAndShare } from '@/src/utils/download';
+import {buildStatsExportUrl, type StatsKind, type ExportFormat} from '@/src/services/api/exportsApi';
+import {downloadAndShare} from '@/src/utils/download';
 
 
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view'; // npm i react-native-keyboard-aware-scroll-view
@@ -409,21 +409,18 @@ function CarWashAdminScreen() {
             try {
                 if (!user?.id) return;
                 const carWashId = user?.carWashDetails?.id ?? user?.id;
-                const { data } = await api.get(`/dashboard/carwashes/${carWashId}/`, {
+                const {data} = await api.get(`/dashboard/carwashes/${carWashId}/`, {
                     baseURL: API_BASE_URL,     // 👈 без /api
                 });
-
                 if (data.name) setPlaceTitle(data.name);
                 if (data.address) setPlaceAddress(data.address);
                 if (data.latitude) setLat(Number(data.latitude));
                 if (data.longitude) setLon(Number(data.longitude));
                 if (data.two_gis_id) setTwoGisPlaceId(data.two_gis_id);
                 if (data.img) setPlacePhotoUrl(data.img);
-
                 if (Array.isArray(data.boxes)) {
                     setWashBays(data.boxes.length);
                 }
-
                 if (Array.isArray(data.body_prices)) {
                     const bodyMap: Record<string, string> = {};
                     data.body_prices.forEach((bp: any) => {
@@ -432,7 +429,6 @@ function CarWashAdminScreen() {
                     setPricesByBody(bodyMap);
                     setChosenBodyIds(Object.keys(bodyMap));
                 }
-
                 if (Array.isArray(data.extra_services)) {
                     const svcMap: Record<string, string> = {};
                     data.extra_services.forEach((es: any) => {
@@ -448,11 +444,8 @@ function CarWashAdminScreen() {
 
         fetchCarWash();
     }, [user?.id,]);
-
-
     const [bodyTypes, setBodyTypes] = useState<{ id: string; name: string }[]>([]);
     const [baseServices, setBaseServices] = useState<{ id: string; name: string }[]>([]);
-
     const handlePickFromSearch = (p: {
         id: string; name: string; address?: string; rating?: number | null;
         latitude?: number | null; longitude?: number | null; photoUrl?: string | null;
@@ -982,7 +975,7 @@ export default function CarWashDashboard() {
 
 
     const [lastStatsParams, setLastStatsParams] =
-        useState<Parameters<typeof fetchDashboardStats>[1] | undefined>({ kind: 'day' });
+        useState<Parameters<typeof fetchDashboardStats>[1] | undefined>({kind: 'day'});
 
     const loadDashboardStats = async (p?: Parameters<typeof fetchDashboardStats>[1]) => {
 
@@ -1005,7 +998,7 @@ export default function CarWashDashboard() {
     const getCustomRange = () => {
         const start = isoKZ(statsFrom ?? new Date());
         const end = isoKZ(statsTo ?? statsFrom ?? new Date());
-        return { start, end };
+        return {start, end};
     };
 
 
@@ -1013,19 +1006,20 @@ export default function CarWashDashboard() {
         try {
             if (selectedTab === 'dashboard') {
                 if (statsKind === 'custom') {
-                    const { start, end } = getCustomRange();
-                    await loadDashboardStats({ kind: 'custom', start, end });
+                    const {start, end} = getCustomRange();
+                    await loadDashboardStats({kind: 'custom', start, end});
                 } else if (statsKind === 'year') {
-                    await loadDashboardStats({ kind: 'year', year: currentYear });
+                    await loadDashboardStats({kind: 'year', year: currentYear});
                 } else {
-                    await loadDashboardStats({ kind: statsKind }); // day|week|month
+                    await loadDashboardStats({kind: statsKind}); // day|week|month
                 }
             } else if (selectedTab === 'bookings') {
                 await loadDashBookings();
             } else if (selectedTab === 'qr') {
                 await generateQrSession();
             }
-        } catch {}
+        } catch {
+        }
     };
 
     useEffect(() => {
@@ -1203,14 +1197,14 @@ export default function CarWashDashboard() {
             let filename: string;
 
             if (statsKind === 'custom') {
-                const { start, end } = getCustomRange();
-                url = buildStatsExportUrl({ kind: 'custom', start, end, format });
+                const {start, end} = getCustomRange();
+                url = buildStatsExportUrl({kind: 'custom', start, end, format});
                 filename = `stats_${start}_${end}.${format}`;
             } else if (statsKind === 'year') {
-                url = buildStatsExportUrl({ kind: 'year', year: currentYear, format });
+                url = buildStatsExportUrl({kind: 'year', year: currentYear, format});
                 filename = `stats_${currentYear}.${format}`;
             } else {
-                url = buildStatsExportUrl({ kind: statsKind, format });
+                url = buildStatsExportUrl({kind: statsKind, format});
                 filename = `stats_${statsKind}.${format}`;
             }
 
@@ -1333,27 +1327,27 @@ export default function CarWashDashboard() {
                                 setStatsFrom(from);
                                 setStatsTo(to);
                                 setStatsKind('custom'); // 👈 переключаем режим
-                                loadDashboardStats({ kind: 'custom', start: isoKZ(from), end: isoKZ(to) });
+                                loadDashboardStats({kind: 'custom', start: isoKZ(from), end: isoKZ(to)});
                             }}
 
 
                         />
-                        <View style={[styles.segmentContainer, { marginTop: 8 }]}>
-                            {(['day','week','month','year'] as const).map(k => (
+                        <View style={[styles.segmentContainer, {marginTop: 8}]}>
+                            {(['day', 'week', 'month', 'year'] as const).map(k => (
                                 <TouchableOpacity
                                     key={k}
                                     style={[styles.segmentBtn, statsKind === k && styles.segmentBtnActive]}
                                     onPress={() => {
                                         setStatsKind(k);
-                                        if (k === 'day')   loadDashboardStats({ kind: 'day'   });
-                                        if (k === 'week')  loadDashboardStats({ kind: 'week'  });
-                                        if (k === 'month') loadDashboardStats({ kind: 'month' });
-                                        if (k === 'year')  loadDashboardStats({ kind: 'year', year: currentYear });
+                                        if (k === 'day') loadDashboardStats({kind: 'day'});
+                                        if (k === 'week') loadDashboardStats({kind: 'week'});
+                                        if (k === 'month') loadDashboardStats({kind: 'month'});
+                                        if (k === 'year') loadDashboardStats({kind: 'year', year: currentYear});
                                         // custom — только через выбор в календаре
                                     }}
                                 >
                                     <Text style={[styles.segmentText, statsKind === k && styles.segmentTextActive]}>
-                                        {k === 'day' ? 'День' : k === 'week' ? 'Неделя' : k === 'month' ? 'Месяц' : 'Год' }
+                                        {k === 'day' ? 'День' : k === 'week' ? 'Неделя' : k === 'month' ? 'Месяц' : 'Год'}
                                     </Text>
                                 </TouchableOpacity>
                             ))}
@@ -1401,9 +1395,9 @@ export default function CarWashDashboard() {
                             )}
                         </View>
                         {/* Кнопки экспорта */}
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 12 }}>
+                        <View style={{flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 12}}>
                             <TouchableOpacity
-                                style={[styles.primaryBtn, { flex: 1 }, exporting && { opacity: 0.6 }]}
+                                style={[styles.primaryBtn, {flex: 1}, exporting && {opacity: 0.6}]}
                                 onPress={() => handleExport('xlsx')}
                                 disabled={exporting}
                             >
@@ -1413,7 +1407,7 @@ export default function CarWashDashboard() {
                             </TouchableOpacity>
 
                             <TouchableOpacity
-                                style={[styles.primaryBtn, { flex: 1 }, exporting && { opacity: 0.6 }]}
+                                style={[styles.primaryBtn, {flex: 1}, exporting && {opacity: 0.6}]}
                                 onPress={() => handleExport('pdf')}
                                 disabled={exporting}
                             >
