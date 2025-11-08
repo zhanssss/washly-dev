@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
-
+import {GIS_API_KEY} from "@/src/config/env";
 
 type Props = {
     apiKey: string; // 2ГИС API KEY

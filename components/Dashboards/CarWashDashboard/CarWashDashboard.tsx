@@ -457,7 +457,6 @@ function CarWashAdminScreen() {
     const onPlacePicked = async (p: { id: string; name?: string; rating?: number; address?: string }) => {
         setTwoGisPlaceId(p.id);
         setIsMapOpen(false);
-
         try {
             const res = await fetch(`https://catalog.api.2gis.com/3.0/items/byid?id=${p.id}&key=${GIS_API_KEY}`);
             const data = await res.json();

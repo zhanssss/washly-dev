@@ -3,6 +3,7 @@ import React, { useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import type { CarWash } from '@/src/services/api/carWashesApi';
+import {GIS_API_KEY} from "@/src/config/env";
 
 // 👇 публичный хэндл
 export type CarWashMapHandle = {
@@ -20,7 +21,7 @@ type Props = {
 
 };
 
-const DEFAULT_KEY = '739f9ccc-d467-4ed8-87b4-bae4175e8aff';
+const DEFAULT_KEY = GIS_API_KEY;
 
 const CarWashMap = forwardRef<CarWashMapHandle, Props>(function CarWashMap(
     {

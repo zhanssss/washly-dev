@@ -10,9 +10,10 @@ export const styles = StyleSheet.create({
         paddingBottom: 12,
     },
     backBtn: {
-        width: 36, height: 36, borderRadius: 10,
+        width: 36, height: 36,     borderRadius: 18,
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: colors.card,
+        backgroundColor: colors.card,         borderWidth: 1,
+        borderColor: '#EFEFEF',
     },
     title: {
         flex: 1, textAlign: 'center',

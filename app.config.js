@@ -3,7 +3,7 @@ const base = {
     name: "Washly Car Wash App",
     owner: "washly",
     slug: "washly-car-wash-app",
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "washly",

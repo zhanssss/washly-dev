@@ -415,9 +415,13 @@ export const styles = StyleSheet.create({
     },
 
     filterBtn: {
-        padding: 10,
-        borderRadius: 8,
-        backgroundColor: '#f1f1f1',
+        marginLeft: 8,
+        height: 40,
+        width: 40,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF5F0',
     },
     filterBtnActive: {
         backgroundColor: '#FF6B35',
@@ -451,5 +455,33 @@ export const styles = StyleSheet.create({
     chipTextActive: {
         color: '#fff',
     },
+    categoriesRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        gap: 8,
+        marginBottom: 16,
+    },
+    catChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 14,
+        backgroundColor: '#F3F4F6',
+        marginHorizontal: 6,
+    },
+    catChipActive: {
+        backgroundColor: '#FFF1E9',
+        borderWidth: 1,
+        borderColor: '#FF6B35',
+    },
+    catChipText: {
+        color: '#111827',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    catChipTextActive: {
+        color: '#FF6B35',
+    },
+
 
 });

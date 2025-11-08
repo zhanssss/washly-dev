@@ -329,7 +329,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     await clearTokens();
                     setUser(null);
                     await AsyncStorage.removeItem('user');
-                    router.replace('/');
+                    router.replace('/map');
                     throw e;
                 }
             }
@@ -541,7 +541,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             await saveUserSnapshot(mapped);
             setAuthUserStore(mapped);
             setClientMe(meResp.data);
-            router.replace('/car-owner');
+            router.replace('/map');
             return {success: true};
         } catch (err: any) {
             console.log('[AUTH] registerDriver error:', err?.response?.data || err?.message || err);
@@ -715,6 +715,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             console.log('Error logging out:', error);
         }
     }, [clearTokens]);
+
+
     const contextValue = useMemo(() => ({
         user,
         setUser,
