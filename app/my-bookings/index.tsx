@@ -9,10 +9,9 @@ import {useMyBookings} from '@/src/data/bookings/useMyBookings';
 import type {MyBooking} from '@/src/types/bookings';
 import {styles} from './my-bookings.styles'
 
-// ...импорты те же
 export default function MyBookingsScreen() {
     const insets = useSafeAreaInsets();
-    const {myBookings, cancelBooking} = useMyBookings();
+    const { myBookings, cancelBooking, cancelingId } = useMyBookings();
 
     const toTel = (raw?: string | null) => {
         const s = (raw ?? '').trim();
@@ -33,17 +32,14 @@ export default function MyBookingsScreen() {
         );
     };
 
-
     const handleOpenBookingMap = (b: MyBooking) => {
         router.push('/map');
     };
-    const handleShowBookingQR = (_b: MyBooking) => {
-        Alert.alert('QR', 'Здесь будет открываться QR-экран конкретной записи');
-    };
-
+    // const handleShowBookingQR = (_b: MyBooking) => {
+    //     Alert.alert('QR', 'Здесь будет открываться QR-экран конкретной записи');
+    // };
     const booked = myBookings.filter(b => b.status === 'booked');
     const history = myBookings.filter(b => b.status !== 'booked');
-
     return (
         <View style={[styles.container, {paddingTop: insets.top}]}>
             {/* Header */}
@@ -110,10 +106,16 @@ export default function MyBookingsScreen() {
                                         </TouchableOpacity>
                                         <TouchableOpacity
                                             style={[styles.actionBtn, styles.cancelBtn]}
-                                            onPress={() => cancelBooking(b.id)}
+                                            onPress={() => cancelBooking(b.id, {
+                                                title: 'Отменить запись',
+                                                message: `Отменить запись в «${b.carWashName}» на ${b.startTime}?`,
+                                            })}
+                                            disabled={cancelingId === b.id}
                                         >
-                                            <X size={16} color={colors.textDark}/>
-                                            <Text style={styles.actionText}>Отменить</Text>
+                                            <X size={16} color={colors.textDark} />
+                                            <Text style={styles.actionText}>
+                                                {cancelingId === b.id ? 'Отмена...' : 'Отменить'}
+                                            </Text>
                                         </TouchableOpacity>
                                     </View>
                                 </View>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import type { MyBooking, BookingStatus } from '@/src/types/bookings';
-import { fetchDriverMyBookings, type DriverMyBookingDto,cancelDriverBooking } from '@/src/services/api/bookingsApi';
-import { useAuthStore } from '@/src/stores/authStore';
+import { fetchDriverMyBookings, type DriverMyBookingDto, cancelDriverBooking } from '@/src/services/api/bookingsApi';
 
 const toMinutes = (hhmm: string) => {
     const [h, m] = hhmm.split(':').map(Number);
@@ -14,13 +14,9 @@ const nowMinutes = () => {
 
 const mapDto = (dto: DriverMyBookingDto): MyBooking => {
     let status: BookingStatus;
-    if (dto.status === 'canceled') {
-        status = 'canceled';
-    } else if (toMinutes(dto.endTime) <= nowMinutes() || dto.status === 'done') {
-        status = 'past';
-    } else {
-        status = 'booked';
-    }
+    if (dto.status === 'canceled') status = 'canceled';
+    else if (toMinutes(dto.endTime) <= nowMinutes() || dto.status === 'done') status = 'past';
+    else status = 'booked';
 
     return {
         id: String(dto.id),
@@ -35,34 +31,39 @@ const mapDto = (dto: DriverMyBookingDto): MyBooking => {
         status,
         latitude: dto.latitude,
         longtitude: dto.longtitude,
-
-        // 👇 NEW
         phoneNumber: dto.phoneNumber,
     };
 };
 
+// маленький helper, чтобы Alert работал как Promise<boolean>
+const confirm = (title: string, message: string) =>
+    new Promise<boolean>((resolve) => {
+        Alert.alert(title, message, [
+            { text: 'Нет', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Да, отменить', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+    });
 
-// useMyBookings.ts
 export function useMyBookings() {
     const [myBookings, setMyBookings] = useState<MyBooking[]>([]);
+    const [cancelingId, setCancelingId] = useState<string | null>(null);
 
-    const load = useCallback(async (token?: string | null) => {
-        if (!token) { setMyBookings([]); return [] as MyBooking[]; }
+    const load = useCallback(async () => {
         try {
-            const raw = await fetchDriverMyBookings(token);
+            const raw = await fetchDriverMyBookings();
             const mapped = raw.map(mapDto);
 
             const booked = mapped
-                .filter(b => b.status === 'booked')
+                .filter((b) => b.status === 'booked')
                 .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
             const history = mapped
-                .filter(b => b.status !== 'booked')
+                .filter((b) => b.status !== 'booked')
                 .sort((a, b) => toMinutes(b.startTime) - toMinutes(a.startTime));
 
             const result = [...booked, ...history];
             setMyBookings(result);
-            return result; // 👈 ВАЖНО: возвращаем актуальные данные
+            return result;
         } catch (e) {
             console.warn('load my bookings failed', e);
             setMyBookings([]);
@@ -70,18 +71,40 @@ export function useMyBookings() {
         }
     }, []);
 
-    useEffect(() => { load(); }, [ load]);
-
-    const cancelBooking = useCallback(async (id: string) => {
-        try {
-            await cancelDriverBooking(id);
-            await load();
-        } catch (e) {
-            console.warn('cancel booking failed', e);
-        }
+    useEffect(() => {
+        load();
     }, [load]);
 
-    const reload = useCallback(() => load(), [load]); // 👈 теперь Promise<MyBooking[]>
+    /**
+     * Отмена бронирования с подтверждением.
+     * @param id ID брони
+     * @param opts.confirm — показывать Alert? (по умолчанию true)
+     */
+    const cancelBooking = useCallback(
+        async (id: string, opts: { confirm?: boolean; title?: string; message?: string } = {}) => {
+            const { confirm: ask = true, title = 'Отмена записи', message = 'Вы уверены, что хотите отменить запись?' } = opts;
 
-    return { myBookings, cancelBooking, reload };
+            if (ask) {
+                const ok = await confirm(title, message);
+                if (!ok) return { success: false, canceledByUser: true };
+            }
+
+            try {
+                setCancelingId(id);
+                await cancelDriverBooking(id);
+                await load();
+                return { success: true };
+            } catch (e) {
+                console.warn('cancel booking failed', e);
+                return { success: false, error: e };
+            } finally {
+                setCancelingId(null);
+            }
+        },
+        [load]
+    );
+
+    const reload = useCallback(() => load(), [load]);
+
+    return { myBookings, cancelBooking, reload, cancelingId };
 }

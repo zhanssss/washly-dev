@@ -81,30 +81,46 @@ export const api = axios.create({
     timeout: 10000,
 });
 
+export const dashboardApi = axios.create({
+    baseURL: `${API_BASE_URL}/dashboard`,
+    timeout: 10000,
+});
+
+export const driverApi = axios.create({
+    baseURL: `${API_BASE_URL}/driver`,
+    timeout: 10000,
+});
+
 const REFRESH_URL = `${API_BASE_URL}/api/auth/token/refresh/`;
 const CLIENT_ME_URL = '/client/me/';
 const WASHER_ME_URL = '/washer/me/';
-
 // Access держим в памяти процесса:
 let accessInMemory: string | null = null;
 let accessExpMs: number | null = null;
+
+// AuthContext.tsx — внутри setAccess заменить на установку заголовков для всех инстансов
+function applyAuthHeaders(instance: typeof api, token: string | null) {
+    if (token) {
+        instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        (instance.defaults.headers.common as any)['Auth-token'] = token; // для бэков, где ждут этот хедер
+    } else {
+        delete instance.defaults.headers.common['Authorization'];
+        delete (instance.defaults.headers.common as any)['Auth-token'];
+    }
+}
 
 function setAccess(token: string | null) {
     accessInMemory = token;
     const setAccessToken = useAuthStore.getState().setAccessToken;
     setAccessToken(token);
 
-    if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        // ↓ для эндпоинтов, где ждут именно Auth-token
-        (api.defaults.headers.common as any)['Auth-token'] = token;
-        accessExpMs = getJwtExp(token);
-    } else {
-        delete api.defaults.headers.common['Authorization'];
-        delete (api.defaults.headers.common as any)['Auth-token'];
-        accessExpMs = null;
-    }
+    applyAuthHeaders(api, token);
+    applyAuthHeaders(dashboardApi, token);
+    applyAuthHeaders(driverApi, token);
+
+    accessExpMs = token ? getJwtExp(token) : null;
 }
+
 
 
 
@@ -158,6 +174,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     // Вверху файла добавь получение методов стора:
     const { setAuthUser: setAuthUserStore, setClientMe, clearClientMe } = useAuthStore.getState();
+
+    // AuthContext.tsx — общий помощник для навешивания интерсепторов на любой инстанс
+
 
 
     useEffect(() => {
@@ -279,21 +298,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return await refreshPromise!;
     }
 
-    useEffect(() => {
-        const reqId = api.interceptors.request.use(async (cfg) => {
+    function attachAuthInterceptors(instance: typeof api) {
+        const reqId = instance.interceptors.request.use(async (cfg) => {
             try {
                 if (!accessInMemory || isExpiring(accessExpMs)) {
                     const t = await ensureFreshAccess();
                     cfg.headers = cfg.headers ?? {};
                     (cfg.headers as any).Authorization = `Bearer ${t}`;
+                    (cfg.headers as any)['Auth-token'] = t;
                 }
             } catch {
-                // пустим как есть — 401 поймает response interceptor
+                // пустим как есть
             }
             return cfg;
         });
 
-        const respId = api.interceptors.response.use(
+        const respId = instance.interceptors.response.use(
             r => r,
             async (error) => {
                 const original = error?.config ?? {};
@@ -303,7 +323,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const t = await ensureFreshAccess();
                     (original as any).headers = (original as any).headers ?? {};
                     (original as any).headers.Authorization = `Bearer ${t}`;
-                    return api(original);
+                    (original as any).headers['Auth-token'] = t;
+                    return instance(original);
                 } catch (e) {
                     await clearTokens();
                     setUser(null);
@@ -315,10 +336,25 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         );
 
         return () => {
-            api.interceptors.request.eject(reqId);
-            api.interceptors.response.eject(respId);
+            instance.interceptors.request.eject(reqId);
+            instance.interceptors.response.eject(respId);
+        };
+    }
+
+    useEffect(() => {
+        const ejectApi = attachAuthInterceptors(api);
+        const ejectDashboard = attachAuthInterceptors(dashboardApi);
+        const ejectDriver = attachAuthInterceptors(driverApi);
+
+        return () => {
+            ejectApi();
+            ejectDashboard();
+            ejectDriver();
         };
     }, [saveTokens, clearTokens]);
+
+
+
 
 
 // Отправка кода (регистрация/вход по SMS)
@@ -499,7 +535,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             });
 
             await saveTokens(access, refresh);
-            const meResp = await api.get('/client/me/'); // Authorization уже подставится
+            const meResp = await api.get('/client/me/');
             const mapped = mapOwnerMeToUser(meResp.data);
             setUser(mapped);
             await saveUserSnapshot(mapped);

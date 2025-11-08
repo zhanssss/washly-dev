@@ -52,11 +52,7 @@ import {
     createQrSession, pollSession, cashApprove,
     type CreateQrSessionResponse
 } from '@/src/services/api/qrApi';
-
-
-// @ts-ignore
-import placeholderPhoto1 from '@/assets/images/placeholders/landscape.svg'
-
+import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 import TwoGisSearchModal from '@/components/TwoGisSearchModal';
 import {useReferenceData} from '@/src/stores/useReferenceData';
 
@@ -281,7 +277,6 @@ type BaseService = { id: string; name: string };
 
 function CarWashAdminScreen() {
     const user = useAuthStore(s => s.user);
-    const placeholderPhoto = placeholderPhoto1;
     const [twoGisPlaceId, setTwoGisPlaceId] = useState<string | null>(null);
     const [placeTitle, setPlaceTitle] = useState<string>('');
     const [placeRating, setPlaceRating] = useState<number | null>(null);
@@ -721,7 +716,7 @@ function CarWashAdminScreen() {
                             <View style={styles.gap8}>
                                 <Text style={styles.label}>Фото</Text>
                                 <Image
-                                    source={placePhotoUrl ? {uri: placePhotoUrl} : placeholderPhoto1}
+                                    source={placePhotoUrl ? { uri: placePhotoUrl } : placeholderWash}
                                     style={styles.photo}
                                 />
                                 <TouchableOpacity style={styles.secondaryBtn} onPress={onPickCustomPhoto}>
@@ -732,7 +727,6 @@ function CarWashAdminScreen() {
                             </View>
                         </View>
                     </View>
-
                     <View style={styles.card}>
                         <Text style={styles.label}>Рабочее время</Text>
                         <View style={styles.rowBetween}>

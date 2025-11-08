@@ -15,6 +15,7 @@ import { cancelDriverBooking } from '@/src/services/api/bookingsApi';
 
 import {styles} from '@/components/Dashboards/CarOwnerDashboard/CarOwnerDashboard.styles';
 import {colors} from '@/assets/Theme/colors';
+import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 
 import type {BookingSlot} from '@/src/data/carWashes';
 import type {
@@ -205,21 +206,15 @@ export default function BookingModal({
         const oldId = conflict?.booking_id;
         try {
             setReplacing(true);
-
-            // 1) сперва отменяем старую бронь
             if (oldId) {
                 await cancelDriverBooking(oldId, accessToken);
             }
-
-            // 2) потом создаём новую
             const payload = { ...lastPayloadRef.current };
-            delete (payload as any).replace_existing; // на всякий случай
-
+            delete (payload as any).replace_existing;
             await createBooking(payload, accessToken);
             setReplaceVisible(false);
             setConflict(null);
             Alert.alert('Готово', 'Время перенесено');
-
             if (selectedWash && selectedBoxId) {
                 await onReloadSlots(Number(selectedWash.id), selectedBoxId, bookingDate);
             }
@@ -254,7 +249,11 @@ export default function BookingModal({
                     <ScrollView style={styles.bookingContent} showsVerticalScrollIndicator={false}>
                         {/* шапка автомойки */}
                         <View style={styles.bookingCarWashInfo}>
-                            <Image  style={styles.bookingCarWashImage}/>
+                            <Image
+                                source={selectedWash?.image ? { uri: selectedWash.image } : placeholderWash}
+                                style={styles.bookingCarWashImage}
+                            />
+
                             <View style={styles.bookingCarWashDetails}>
                                 <Text style={styles.bookingCarWashName}>{selectedWash.name}</Text>
 

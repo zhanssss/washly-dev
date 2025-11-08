@@ -3,6 +3,7 @@ export const colors = {
     // brand
     primary: "#14213D",  // глубокий синий — основной
     accent: "#FCA311",  // жёлтый — акцент/CTA
+    accentLight: "#fca539",  // жёлтый — акцент/CTA
     premium: "#0E1A34",  // тёмнее синего для выделений/ховеров
 
     success: "#2E7D32",
