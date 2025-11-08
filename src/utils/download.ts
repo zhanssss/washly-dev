@@ -1,7 +1,6 @@
-// src/utils/download.ts
 import { File, Directory, Paths } from 'expo-file-system';
-import { fetch } from 'expo/fetch';
 import * as Sharing from 'expo-sharing';
+import { api } from '@/contexts/AuthContext';
 
 export async function downloadAndShare(
     url: string,
@@ -13,17 +12,18 @@ export async function downloadAndShare(
 
     const file = new File(dir, filename);
 
-    const res = await fetch(url, { headers, method: 'GET' });
-    if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error(`Download failed: ${res.status} ${msg}`);
-    }
+    // Используем общий axios-инстанс
+    const res = await api.get<ArrayBuffer>(url, {
+        headers,
+        responseType: 'arraybuffer',
+    });
 
-    const bytes = await res.bytes();
+    const bytes = new Uint8Array(res.data);
     await file.write(bytes);
 
     if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri);
     }
+
     return file.uri;
 }

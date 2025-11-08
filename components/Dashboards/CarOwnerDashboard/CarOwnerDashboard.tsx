@@ -11,16 +11,16 @@ import {
     Map as MapIcon,
     Star, Phone, Clock, MapPin, LogOut, QrCode, BarChart3, Search, Filter,
     Trophy, Calendar, Bell, Target, Crown, User, Settings, Edit, Car,
-    Shield, HelpCircle, Camera, Save, X,
+    Shield, HelpCircle, Camera, Save, X, Trash2,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import EditProfileModal from '@/components/Profile/EditProfileModal/EditProfileModal';
-
-
-import {useAuth} from '@/contexts/AuthContext';
+import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
+import OwnerHeader from '@/components/OwnerHeader/OwnerHeader';
+import {api, useAuth} from '@/contexts/AuthContext';
 import {useVisits} from '@/contexts/VisitsContext';
 import {
     CarWash,
@@ -38,10 +38,10 @@ import {router} from 'expo-router';
 import {trpc} from '@/lib/trpc';
 import {colors} from '@/assets/Theme/colors';
 
-
 import BookingModal from "@/components/BookingModal/BookingModal";
 import {useMyBookings} from '@/src/data/bookings/useMyBookings';
 import type {MyBooking} from '@/src/types/bookings';
+import FiltersModal from '@/components/Filter/FiltersModal';
 
 
 interface Notification {
@@ -55,9 +55,24 @@ interface Notification {
 
 export function CarOwnerDashboard() {
     const [showQRScanner, setShowQRScanner] = useState(false);
-    const [selectedTab, setSelectedTab] = useState<'catalog' | 'stats'>('catalog');
     const [searchQuery, setSearchQuery] = useState('');
     const [showFilters, setShowFilters] = useState(false);
+    const [activeFilters, setActiveFilters] = useState<{
+        body?: string | null;
+        extras?: string[];
+        priceRange?: [number, number];
+        sortBy?: 'distance' | 'rating' | 'price' | null;
+        isOpenNow?: boolean;
+        city?: string | null;
+    }>({
+        body: null,
+        extras: [],
+        priceRange: [0, 50000],
+        sortBy: null,
+        isOpenNow: false,
+        city: null,
+    });
+
     const [selectedFilter, setSelectedFilter] = useState<'all' | 'distance' | 'rating' | 'price'>('all');
     const [showBooking, setShowBooking] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<BookingSlot | null>(null);
@@ -75,7 +90,7 @@ export function CarOwnerDashboard() {
     const [selectedBoxId, setSelectedBoxId] = useState<number | null>(null);
     const [boxSlots, setBoxSlots] = useState<BoxSlotsResponse | null>(null);
     const [loadingSlots, setLoadingSlots] = useState(false);
-    const { myBookings, cancelBooking, reload } = useMyBookings();
+    const {myBookings, cancelBooking, reload} = useMyBookings();
     const {user, logout} = useAuth();
     const trpcUtils = trpc.useUtils();
     const updateOwnerMutation = trpc.profile.updateCarOwner.useMutation();
@@ -161,7 +176,7 @@ export function CarOwnerDashboard() {
     const uniqNums = (arr: number[]) => Array.from(new Set(arr));
 
 // извлечь ids допов из брони и промапить на каталог мойки
-    function mapBookingExtrasToIds(booking: any, extrasCatalog: Array<{id: number; name: string}>) {
+    function mapBookingExtrasToIds(booking: any, extrasCatalog: Array<{ id: number; name: string }>) {
         if (!booking || !extrasCatalog?.length) return [] as number[];
 
         // 1) если бэк уже отдаёт id
@@ -206,7 +221,7 @@ export function CarOwnerDashboard() {
         token: string;
         pollSelectedIds: number[] | undefined;
         booking: any;
-        extrasCatalog: Array<{id: number; name: string}>;
+        extrasCatalog: Array<{ id: number; name: string }>;
     }) {
         // ids из брони
         const fromBooking = mapBookingExtrasToIds(booking, extrasCatalog);
@@ -224,8 +239,8 @@ export function CarOwnerDashboard() {
                 extrasSavingRef.current = true;
                 const r = await updateExtras(token, union);
                 if (r?.amount_total) setQrAmount(r.amount_total);
-            } catch {}
-            finally {
+            } catch {
+            } finally {
                 extrasSavingRef.current = false;
             }
         }
@@ -290,7 +305,8 @@ export function CarOwnerDashboard() {
                 if (Array.isArray(s?.selected_extra_ids) && !extrasSavingRef.current) {
                     setSelectedQrExtras(s.selected_extra_ids);
                 }
-            } catch {}
+            } catch {
+            }
         };
 
         tick();
@@ -309,7 +325,8 @@ export function CarOwnerDashboard() {
     useEffect(() => {
         if (showQRScanner) {
             // обновим список, чтобы сразу после создания записи QR видел её
-            reload().catch(() => {});
+            reload().catch(() => {
+            });
         }
     }, [showQRScanner, reload]);
 
@@ -345,7 +362,11 @@ export function CarOwnerDashboard() {
             (async () => {
                 try {
                     const detail = await fetchCarWashDetail(Number(pollInfo.carWashId));
-                    const extras = (detail?.extraServices || []).map((e: any) => ({ id: e.id, name: e.name, price: e.price }));
+                    const extras = (detail?.extraServices || []).map((e: any) => ({
+                        id: e.id,
+                        name: e.name,
+                        price: e.price
+                    }));
                     setQrWashExtras(extras);
                     const activeBooking = pickActive(myBookings);
                     await prefillExtrasFromBookingAndPoll({
@@ -357,7 +378,7 @@ export function CarOwnerDashboard() {
 
                     setExtrasVisible(true);
 
-                }catch {
+                } catch {
                     setQrWashExtras([]);
                     setSelectedQrExtras(pollInfo.selected_extra_ids || []);
                     setExtrasVisible(true);
@@ -392,6 +413,38 @@ export function CarOwnerDashboard() {
     };
 
     const pickActive = (list: MyBooking[]) => list.find(b => b.status === 'booked') || null;
+
+
+    const handleApplyFilters = (filters: any) => {
+        setActiveFilters(filters);
+        setShowFilters(false);
+    };
+
+    const handleDeleteAccount = () => {
+        Alert.alert(
+            'Удалить аккаунт',
+            'Это действие необратимо. Ваш профиль и данные будут удалены. Продолжить?',
+            [
+                {text: 'Отмена', style: 'cancel'},
+                {
+                    text: 'Удалить',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // закрыть модалку, чтобы не оставалась открытой
+                            setShowProfile(false);
+                            // реальный вызов удаления
+                            await api.delete('/privacy/delete-my-user/');
+                            Alert.alert('Готово', 'Аккаунт удалён');
+                            logout();
+                        } catch (e: any) {
+                            Alert.alert('Ошибка', e?.message ?? 'Не удалось удалить аккаунт');
+                        }
+                    },
+                },
+            ],
+        );
+    };
 
 
     const handlePay = async (method: 'card' | 'cash') => {
@@ -515,6 +568,8 @@ export function CarOwnerDashboard() {
         bookingSlots: BookingSlot[];
         availableSlots: number;
         futureFreeSlots: number;
+        city?: string; // 👈 добавляем, чтобы фильтровать по городу
+        extraServices?: Array<{ id: number; name: string }>; // 👈 добавляем для фильтра по допам
     };
 
 
@@ -721,6 +776,8 @@ export function CarOwnerDashboard() {
                 bookingSlots: [],
                 availableSlots: availBoxes,
                 futureFreeSlots: slotsTotal,
+                city: (carWash as any)?.city || '', // 👈 подстраховка, даже если нет на бэке
+                extraServices: (carWash as any)?.extraServices || [], // 👈 под фильтр по допам
             };
         });
     }, [carWashes, userLocation, travelMap, availableByWash]);
@@ -738,44 +795,96 @@ export function CarOwnerDashboard() {
     const filteredCarWashes = useMemo(() => {
         let filtered = enhancedCarWashes;
 
+        // === Применяем активные фильтры ===
 
-        // фильтруем по кузову пользователя (только если по мойке реально есть список кузовов)
-        const userBody = user?.carDetails?.bodyType?.toLowerCase?.();
-        if (userBody) {
+        // 1. Кузов
+        if (activeFilters.body) {
+            filtered = filtered.filter(cw =>
+                cw.availableServices?.some(
+                    s => s?.bodyName?.toLowerCase?.() === activeFilters.body?.toLowerCase?.()
+                )
+            );
+        }
+
+        // 2. Цена
+        const [min, max] = activeFilters.priceRange || [0, Infinity];
+        filtered = filtered.filter(cw =>
+            typeof cw.price === 'number' ? cw.price >= min && cw.price <= max : true
+        );
+
+        // 3. "Работает сейчас"
+        if (activeFilters.isOpenNow) {
+            filtered = filtered.filter(cw =>
+                cw.workingHoursDetailed
+                    ? isCarWashOpen(cw.workingHoursDetailed)
+                    : false
+            );
+        }
+
+        // 4. TODO: фильтр по городу (когда появится поле city)
+        if (activeFilters.city) {
+            filtered = filtered.filter(cw =>
+                cw.city?.toLowerCase?.() === activeFilters.city?.toLowerCase?.()
+            );
+        }
+
+        // 5. Доп. услуги (пока только по совпадению по имени)
+        if (activeFilters.extras?.length) {
             filtered = filtered.filter(cw => {
-                const arr = cw.availableServices;
-                if (!arr || arr.length === 0) return true; // нет данных — не отбрасываем мойку
-                return arr.some(bp => bp?.bodyName?.toLowerCase?.() === userBody);
+                const names = cw.extraServices?.map((e: { name: string; }) => e.name.toLowerCase()) || [];
+                return activeFilters.extras!.some(e =>
+                    names.includes(e.toLowerCase())
+                );
             });
         }
 
-
-        // поиск
-        filtered = filtered.filter(carWash =>
-            carWash.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            carWash.address.toLowerCase().includes(searchQuery.toLowerCase())
+        // 6. Поиск
+        filtered = filtered.filter(
+            cw =>
+                (cw.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (cw.address ?? '').toLowerCase().includes(searchQuery.toLowerCase())
         );
 
-        // сортировка по близости и топ-10
-        filtered = filtered
-            .sort((a, b) => {
-                const aKey = a.travelTimeMin ?? a.distance;
-                const bKey = b.travelTimeMin ?? b.distance;
-                return aKey - bKey;
-            })
-            .slice(0, 10);
-
-        switch (selectedFilter) {
+        // 7. Сортировка
+        switch (activeFilters.sortBy) {
             case 'distance':
-                return [...filtered].sort((a, b) => a.distance - b.distance);
+                filtered = [...filtered].sort((a, b) => a.distance - b.distance);
+                break;
             case 'rating':
-                return [...filtered].sort((a, b) => b.rating - a.rating);
+                filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+                break;
             case 'price':
-                return [...filtered].sort((a, b) => a.price - b.price);
+                filtered = [...filtered].sort((a, b) => a.price - b.price);
+                break;
             default:
-                return filtered;
+                break;
         }
-    }, [enhancedCarWashes, searchQuery, selectedFilter, user?.carDetails?.bodyType]);
+
+        // === Если фильтры не выбраны, показываем первым ближайший с доступными слотами ===
+        const noFilters =
+            !activeFilters.body &&
+            (!activeFilters.extras || activeFilters.extras.length === 0) &&
+            (!activeFilters.city) &&
+            !activeFilters.isOpenNow &&
+            (!activeFilters.sortBy);
+
+        if (noFilters) {
+            // находим ближайшую автомойку с доступными слотами
+            const nearestWithSlots = [...enhancedCarWashes]
+                .filter(cw => cw.futureFreeSlots > 0)
+                .sort((a, b) => a.distance - b.distance)[0];
+
+            if (nearestWithSlots) {
+                filtered = [
+                    nearestWithSlots,
+                    ...filtered.filter(cw => cw.id !== nearestWithSlots.id),
+                ];
+            }
+        }
+
+
+        return filtered.slice(0, 10);
+    }, [enhancedCarWashes, searchQuery, activeFilters]);
 
 
     // слоты
@@ -1035,7 +1144,8 @@ export function CarOwnerDashboard() {
                 setPollInfo(s);
                 if (s?.status) setQrStatus(s.status);
                 if (s?.amount_total) setQrAmount(s.amount_total);
-            } catch {}
+            } catch {
+            }
 
             const cwId = Number(booking.carWashId ?? s?.carWashId ?? 0) || 0;
 
@@ -1043,7 +1153,7 @@ export function CarOwnerDashboard() {
                 try {
                     const d = await fetchCarWashDetail(cwId);
                     setQrWashDetail(d);
-                    const extras = (d?.extraServices || []).map((e: any) => ({ id: e.id, name: e.name, price: e.price }));
+                    const extras = (d?.extraServices || []).map((e: any) => ({id: e.id, name: e.name, price: e.price}));
                     setQrWashExtras(extras);
 
                     await prefillExtrasFromBookingAndPoll({
@@ -1137,266 +1247,7 @@ export function CarOwnerDashboard() {
 
         <View style={[styles.container, {paddingTop: insets.top}]}>
 
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.profileIcon} onPress={() => setShowProfile(true)}>
-                    <User color={colors.accent} size={20}/>
-                </TouchableOpacity>
-
-                <View style={styles.userInfoContainer}>
-                    <View style={styles.userBasicInfo}>
-                        <Text style={styles.greeting}>{user?.name || 'Пользователь'}</Text>
-                    </View>
-                    {user?.carDetails && (
-                        <View style={styles.carInfoInHeader}>
-                            <Text style={styles.carInfoText}>{user.carDetails.licensePlate}</Text>
-                        </View>
-                    )}
-                </View>
-
-                <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.subscriptionHeaderButton}
-                                      onPress={() => router.push('/subscription')}>
-                        <Crown color={colors.accent} size={16}/>
-                        <Text style={styles.subscriptionHeaderText}>ПРЕМИУМ</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={() => setShowNotifications(true)} style={styles.notificationButton}>
-                        <Bell color={colors.accent} size={20}/>
-                        {unreadCount > 0 && (
-                            <View style={styles.notificationBadge}>
-                                <Text style={styles.notificationCount}>{unreadCount}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    {/* Кнопки Карта и QR переехали вниз в навбар */}
-                </View>
-            </View>
-
-            {/* Tabs */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity
-                    style={[styles.tab, selectedTab === 'catalog' && styles.activeTab]}
-                    onPress={() => setSelectedTab('catalog')}
-                >
-                    <Text style={[styles.tabText, selectedTab === 'catalog' && styles.activeTabText]}>КАТАЛОГ</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, selectedTab === 'stats' && styles.activeTab]}
-                    onPress={() => setSelectedTab('stats')}
-                >
-                    <Text style={[styles.tabText, selectedTab === 'stats' && styles.activeTabText]}>СТАТИСТИКА</Text>
-                </TouchableOpacity>
-            </View>
-
-            {selectedTab === 'catalog' ? (
-                <ScrollView
-                    showsVerticalScrollIndicator={false} style={styles.mapTabContainer}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor="#14213D"
-                        />
-                    }>
-                    {/* Поиск / фильтры */}
-                    <View style={styles.searchContainer}>
-                        <View style={styles.searchInputContainer}>
-                            <Search color={colors.mutedText} size={20}/>
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Найти автомойку..."
-                                placeholderTextColor={colors.mutedText}
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                            />
-                        </View>
-                        <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
-                            <Filter color={colors.accent} size={20}/>
-                        </TouchableOpacity>
-                    </View>
-                    {/* Кнопка "Мои записи" */}
-                    <View style={styles.myBookingsNavWrap}>
-                        <TouchableOpacity
-                            style={styles.myBookingsNavButton}
-                            onPress={() => router.push('/my-bookings')}
-                        >
-                            <Calendar color={colors.textDark} size={16}/>
-                            <Text style={styles.myBookingsNavText}>МОИ ЗАПИСИ</Text>
-                        </TouchableOpacity>
-                    </View>
-                    {/* Список автомоек */}
-                    {loadingCarWashes ? (
-                        <View style={{padding: 24, alignItems: 'center', justifyContent: 'center'}}>
-                            <ActivityIndicator/>
-                            <Text style={{marginTop: 8, color: colors.mutedText}}>Загрузка автомоек…</Text>
-                        </View>
-                    ) : carWashesError ? (
-                        <View style={{padding: 24, alignItems: 'center'}}>
-                            <Text style={{color: colors.danger}}>{carWashesError}</Text>
-                        </View>
-                    ) : filteredCarWashes.length === 0 ? (
-                        <View style={{padding: 24, alignItems: 'center'}}>
-                            <Text style={{color: colors.mutedText}}>Нет доступных автомоек</Text>
-                        </View>
-                    ) : (
-                        <View
-                            style={[
-                                styles.scrollableContent,
-                                styles.scrollableContentContainer,
-                                { paddingBottom: Math.max(insets.bottom, 12) + 64 },
-                            ]}
-                        >
-                            <View style={styles.listContainer}>
-                                <View style={styles.listHeader}>
-                                    <Text style={styles.listTitle}>БЛИЖАЙШИЕ АВТОМОЙКИ</Text>
-                                    <Text style={styles.listSubtitle}>{filteredCarWashes.length} доступно сейчас</Text>
-                                </View>
-
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                                            contentContainerStyle={styles.scrollContent}>
-                                    {filteredCarWashes.map((carWash, index) => (
-                                        <TouchableOpacity
-                                            key={carWash.id}
-                                            style={[
-                                                styles.carWashCard,
-                                                selectedWash?.id === carWash.id && styles.selectedCard,
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedWash(carWash)
-                                                openBookingForWash(carWash)
-                                            }}
-                                        >
-                                            {carWash.id === nearestId && (
-                                                <View style={styles.nearestBadge}>
-                                                    <MapPin color={colors.textWhite} size={12}/>
-                                                    <Text style={styles.nearestBadgeText}>БЛИЖАЙШАЯ</Text>
-                                                </View>
-                                            )}
-                                            <Image source={{uri: carWash.image}} style={styles.carWashImage}/>
-                                            <View style={styles.cardContent}>
-                                                <Text style={styles.carWashName}>{carWash.name}</Text>
-                                                <View style={styles.cardMetrics}>
-                                                    <View style={styles.ratingContainer}>
-                                                        <Star color={colors.accent} size={14} fill={colors.accent}/>
-                                                        <Text style={styles.rating}>{carWash.rating}</Text>
-                                                    </View>
-                                                    <View style={styles.distanceContainer}>
-                                                        <MapPin color={colors.mutedText} size={12}/>
-                                                        <Text
-                                                            style={styles.distance}>{carWash.distance.toFixed(1)} км</Text>
-                                                    </View>
-                                                    <View style={styles.cardMetrics}>
-                                                        <View style={styles.distanceContainerTime}>
-                                                            <MapPin color={colors.mutedText} size={12}/>
-                                                            <Text style={styles.distance}>
-                                                                {carWash.travelTimeMin ? `~${carWash.travelTimeMin} мин` : `${carWash.distance.toFixed(1)} км`}
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                </View>
-                                                <Text style={styles.address}>{carWash.address}</Text>
-                                                <View style={styles.priceContainer}>
-                                                    <Text style={styles.priceLabel}>от</Text>
-                                                    <Text style={styles.price}>{carWash.price} ₸</Text>
-                                                </View>
-                                                <Text style={{
-                                                    color: carWash.workingHoursDetailed
-                                                        ? isCarWashOpen(carWash.workingHoursDetailed) ? 'green' : 'red'
-                                                        : '#888'
-                                                }}>
-                                                    {carWash.workingHoursDetailed && isCarWashOpen(carWash.workingHoursDetailed)
-                                                        ? 'Открыто'
-                                                        : 'Закрыто'}
-                                                </Text>
-                                                {/* слоты */}
-                                                <View style={styles.availableSlotsContainer}>
-                                                    <View style={styles.availableSlotsIndicator}>
-                                                        <View
-                                                            style={[
-                                                                styles.availabilityDot,
-                                                                carWash.availableSlots >= 2
-                                                                    ? styles.availabilityGreen
-                                                                    : carWash.availableSlots === 1
-                                                                        ? styles.availabilityYellow
-                                                                        : styles.availabilityRed,
-                                                            ]}
-                                                        />
-                                                        <Text style={styles.availableSlotsText}>
-                                                            {carWash.futureFreeSlots} свободных слотов сегодня
-                                                        </Text>
-                                                    </View>
-                                                </View>
-                                                <TouchableOpacity
-                                                    style={styles.quickBookButton}
-                                                    onPress={() => {
-                                                        setSelectedWash(carWash);
-                                                        openBookingForWash(carWash);
-                                                    }}
-                                                >
-                                                    <Calendar color={colors.textDark} size={14}/>
-                                                    <Text style={styles.quickBookText}>ЗАПИСАТЬСЯ</Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        </View>
-                    )}
-                </ScrollView>
-            ) : (
-                <ScrollView
-                    style={styles.statsContainer}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{paddingBottom: (Math.max(insets.bottom, 12) + 64)}}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor={colors.accent}
-                        />
-                    }
-                >
-                    <View style={styles.statsSection}>
-                        <Text style={styles.statsSectionTitle}>МОЯ СТАТИСТИКА</Text>
-
-                        <View style={styles.statsGrid}>
-                            <View style={styles.statCard}>
-                                <BarChart3 color={colors.accent} size={24}/>
-                                <Text style={styles.statNumber}>{userStats.totalVisits}</Text>
-                                <Text style={styles.statLabel}>Всего визитов</Text>
-                            </View>
-
-                            <View style={styles.statCard}>
-                                <Star color={colors.accent} size={24}/>
-                                <Text style={styles.statNumber}>{userStats.subscriptionVisits}</Text>
-                                <Text style={styles.statLabel}>По подписке</Text>
-                            </View>
-
-                            <View style={styles.statCard}>
-                                <Clock color={colors.accent} size={24}/>
-                                <Text style={styles.statNumber}>{userStats.monthlyVisits}</Text>
-                                <Text style={styles.statLabel}>В этом месяце</Text>
-                            </View>
-
-                            <View style={styles.statCard}>
-                                <MapPin color={colors.accent} size={24}/>
-                                <Text style={styles.statNumber}>{userStats.regularVisits}</Text>
-                                <Text style={styles.statLabel}>Обычные мойки</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.favoriteSection}>
-                            <Text style={styles.favoriteSectionTitle}>ЛЮБИМАЯ АВТОМОЙКА</Text>
-                            <View style={styles.favoriteCard}>
-                                <MapPin color={colors.accent} size={20}/>
-                                <Text style={styles.favoriteText}>{userStats.favoriteCarWash}</Text>
-                            </View>
-                        </View>
-                    </View>
-                </ScrollView>
-            )}
+            <OwnerHeader />
 
             <QRScanner isVisible={showQRScanner} onScan={handleQRScan} onClose={() => setShowQRScanner(false)}/>
 
@@ -1469,7 +1320,9 @@ export function CarOwnerDashboard() {
                                 <View style={styles.profileUserInfo}>
                                     <View style={styles.profileUserInfo}>
                                         <Text style={styles.profileUserName}>
-                                            {user?.name || user?.carDetails?.ownerName || 'Пользователь'}
+                                            <Text style={styles.profileUserName}>
+                                                {user?.username || user?.name || user?.carDetails?.ownerName || 'Пользователь'}
+                                            </Text>
                                         </Text>
                                         <Text style={styles.profileUserPhone}>{user?.phone}</Text>
                                         <View style={styles.profileStatusBadge}>
@@ -1480,7 +1333,6 @@ export function CarOwnerDashboard() {
                                 </View>
                             </View>
                         </View>
-
                         <View style={styles.settingsSection}>
                             <Text style={styles.settingsSectionTitle}>НАСТРОЙКИ</Text>
 
@@ -1520,6 +1372,15 @@ export function CarOwnerDashboard() {
                             >
                                 <LogOut color="#FF0000" size={20}/>
                                 <Text style={styles.profileLogoutText}>Выйти из аккаунта</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.profileLogoutButton, {borderColor: '#FF3B30'}]}
+                                onPress={handleDeleteAccount}
+                            >
+                                <Trash2 color="#FF3B30" size={20}/>
+                                <Text style={[styles.profileLogoutText, {color: '#FF3B30'}]}>
+                                    Удалить аккаунт
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
@@ -1720,7 +1581,6 @@ export function CarOwnerDashboard() {
                     </ScrollView>
                 </View>
             </Modal>
-
             <Modal
                 visible={extrasVisible}
                 animationType="slide"
@@ -1734,19 +1594,17 @@ export function CarOwnerDashboard() {
                             <Text style={styles.closeButtonText}>✕</Text>
                         </TouchableOpacity>
                     </View>
-
                     <ScrollView style={styles.profileContent} showsVerticalScrollIndicator={false}>
-
                         {/* CARD 1: Мойка + выбранные допы */}
                         <View style={styles.checkoutCard}>
                             <Text style={styles.checkoutBlockTitle}>Ваша услуга</Text>
 
                             <View style={styles.washRow}>
                                 <Image
-                                    source={{ uri: (qrWashDetail as any)?.image || (selectedWash as any)?.image }}
+                                    source={{uri: (qrWashDetail as any)?.image || (selectedWash as any)?.image}}
                                     style={styles.washThumb}
                                 />
-                                <View style={{ flex: 1 }}>
+                                <View style={{flex: 1}}>
                                     <Text style={styles.washName}>
                                         {qrWashDetail?.name || selectedWash?.name || 'Автомойка'}
                                     </Text>
@@ -1767,11 +1625,12 @@ export function CarOwnerDashboard() {
                                             return (
                                                 <TouchableOpacity
                                                     key={ex.id}
-                                                    style={[styles.extraBtn, active && styles.extraBtnActive, isUpdatingExtras && { opacity: 0.7 }]}
+                                                    style={[styles.extraBtn, active && styles.extraBtnActive, isUpdatingExtras && {opacity: 0.7}]}
                                                     onPress={() => toggleQrExtra(ex.id)}
                                                     disabled={isUpdatingExtras}
                                                 >
-                                                    <Text style={[styles.extraBtnText, active && styles.extraBtnTextActive]}>
+                                                    <Text
+                                                        style={[styles.extraBtnText, active && styles.extraBtnTextActive]}>
                                                         {ex.name}
                                                     </Text>
                                                     <Text>· {ex.price.toLocaleString()} ₸</Text>
@@ -1784,7 +1643,6 @@ export function CarOwnerDashboard() {
                                 <Text style={styles.mutedText}>Доп. услуги недоступны</Text>
                             )}
                         </View>
-
                         {/* CARD 2: Биллинг */}
                         <View style={styles.billingCard}>
                             <Text style={styles.checkoutBlockTitle}>Счёт</Text>
@@ -1808,7 +1666,7 @@ export function CarOwnerDashboard() {
                                 </Text>
                             </View>
 
-                            <View style={styles.billingDivider} />
+                            <View style={styles.billingDivider}/>
 
                             <View style={styles.billingTotalRow}>
                                 <Text style={styles.billingTotalLabel}>Итого</Text>
@@ -1817,7 +1675,6 @@ export function CarOwnerDashboard() {
                                 </Text>
                             </View>
                         </View>
-
                         <View style={styles.paymentCard}>
                             <Text style={styles.checkoutBlockTitle}>Оплата</Text>
                             <View style={styles.paySelector}>
@@ -1825,7 +1682,8 @@ export function CarOwnerDashboard() {
                                     style={[styles.payOption, paymentMethod === 'cash' && styles.payOptionActive]}
                                     onPress={() => setPaymentMethod('cash')}
                                 >
-                                    <Text style={[styles.payOptionText, paymentMethod === 'cash' && styles.payOptionTextActive]}>
+                                    <Text
+                                        style={[styles.payOptionText, paymentMethod === 'cash' && styles.payOptionTextActive]}>
                                         Наличные
                                     </Text>
                                 </TouchableOpacity>
@@ -1841,12 +1699,11 @@ export function CarOwnerDashboard() {
                                 </TouchableOpacity>
                             </View>
                         </View>
-
                         {/* CTA */}
-                        <View style={{ padding: 16 }}>
+                        <View style={{padding: 16}}>
                             <TouchableOpacity
                                 disabled={isPaying}
-                                style={[styles.primaryCTA, isPaying && { opacity: 0.6 }]}
+                                style={[styles.primaryCTA, isPaying && {opacity: 0.6}]}
                                 onPress={() => {
                                     if (paymentMethod === 'card') {
                                         Alert.alert('Скоро', 'Оплата картой пока недоступна.');
@@ -1859,7 +1716,6 @@ export function CarOwnerDashboard() {
                                     {isPaying ? 'Обрабатываем…' : 'Подтвердить и начать'}
                                 </Text>
                             </TouchableOpacity>
-
                             {pollInfo?.status === 'cash_waiting_approval' && (
                                 <Text style={styles.pendingCashText}>Ожидаем подтверждение кассира…</Text>
                             )}
@@ -1874,6 +1730,11 @@ export function CarOwnerDashboard() {
                 onClose={() => setShowEditProfile(false)}
             />
 
+            <FiltersModal
+                visible={showFilters}
+                onClose={() => setShowFilters(false)}
+                onApply={handleApplyFilters}
+            />
 
             {/* === НИЖНИЙ НАВБАР === */}
             <View style={[styles.bottomNav, {paddingBottom: Math.max(insets.bottom, 12)}]}>

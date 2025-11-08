@@ -25,7 +25,7 @@ export default function Index() {
 
     if (user) {
         return user.type === 'car-owner'
-            ? <Redirect href="/car-owner" />
+            ? <Redirect href="/map" />
             : <Redirect href="/car-wash" />;
     }
 

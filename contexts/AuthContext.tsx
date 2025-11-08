@@ -33,11 +33,12 @@ type ClientMe = {
     role: 'client' | 'washer';
     registered_at: string;
     car_number: string;
-    car_body: string;     // приходит строкой "2"
+    car_body: number;
     last_wash: string | null;
 };
 
 export interface CarWashDetails {
+    id: number;
     name: string;
     address: string;
     phone: string;
@@ -52,6 +53,7 @@ export interface CarWashDetails {
     };
 }
 
+
 export interface User {
     id: string;
     phone: string;
@@ -59,37 +61,67 @@ export interface User {
     name?: string;
     isVerified: boolean;
     password?: string;
+
+    username?: string;
+    registered_at?: string;
+    last_wash?: string | null;
+    car_number?: string;
+    car_body?: number | string;
+    brand?: number | null;
+    city?: number | null;
+    color?: number | null;
+    car_model?: string;
+
     carDetails?: CarDetails;
     carWashDetails?: CarWashDetails;
 }
-
 // AuthContext.tsx
 export const api = axios.create({
     baseURL: `${API_BASE_URL}/api`,
     timeout: 10000,
 });
 
+export const dashboardApi = axios.create({
+    baseURL: `${API_BASE_URL}/dashboard`,
+    timeout: 10000,
+});
+
+export const driverApi = axios.create({
+    baseURL: `${API_BASE_URL}/driver`,
+    timeout: 10000,
+});
+
 const REFRESH_URL = `${API_BASE_URL}/api/auth/token/refresh/`;
 const CLIENT_ME_URL = '/client/me/';
 const WASHER_ME_URL = '/washer/me/';
-
 // Access держим в памяти процесса:
 let accessInMemory: string | null = null;
 let accessExpMs: number | null = null;
 
+// AuthContext.tsx — внутри setAccess заменить на установку заголовков для всех инстансов
+function applyAuthHeaders(instance: typeof api, token: string | null) {
+    if (token) {
+        instance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        (instance.defaults.headers.common as any)['Auth-token'] = token; // для бэков, где ждут этот хедер
+    } else {
+        delete instance.defaults.headers.common['Authorization'];
+        delete (instance.defaults.headers.common as any)['Auth-token'];
+    }
+}
+
 function setAccess(token: string | null) {
     accessInMemory = token;
     const setAccessToken = useAuthStore.getState().setAccessToken;
-    setAccessToken(token); // ← синхронизация со стором
+    setAccessToken(token);
 
-    if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        accessExpMs = getJwtExp(token);
-    } else {
-        delete api.defaults.headers.common['Authorization'];
-        accessExpMs = null;
-    }
+    applyAuthHeaders(api, token);
+    applyAuthHeaders(dashboardApi, token);
+    applyAuthHeaders(driverApi, token);
+
+    accessExpMs = token ? getJwtExp(token) : null;
 }
+
+
 
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -142,6 +174,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     // Вверху файла добавь получение методов стора:
     const { setAuthUser: setAuthUserStore, setClientMe, clearClientMe } = useAuthStore.getState();
+
+    // AuthContext.tsx — общий помощник для навешивания интерсепторов на любой инстанс
+
 
 
     useEffect(() => {
@@ -263,21 +298,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         return await refreshPromise!;
     }
 
-    useEffect(() => {
-        const reqId = api.interceptors.request.use(async (cfg) => {
+    function attachAuthInterceptors(instance: typeof api) {
+        const reqId = instance.interceptors.request.use(async (cfg) => {
             try {
                 if (!accessInMemory || isExpiring(accessExpMs)) {
                     const t = await ensureFreshAccess();
                     cfg.headers = cfg.headers ?? {};
                     (cfg.headers as any).Authorization = `Bearer ${t}`;
+                    (cfg.headers as any)['Auth-token'] = t;
                 }
             } catch {
-                // пустим как есть — 401 поймает response interceptor
+                // пустим как есть
             }
             return cfg;
         });
 
-        const respId = api.interceptors.response.use(
+        const respId = instance.interceptors.response.use(
             r => r,
             async (error) => {
                 const original = error?.config ?? {};
@@ -287,22 +323,38 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const t = await ensureFreshAccess();
                     (original as any).headers = (original as any).headers ?? {};
                     (original as any).headers.Authorization = `Bearer ${t}`;
-                    return api(original);
+                    (original as any).headers['Auth-token'] = t;
+                    return instance(original);
                 } catch (e) {
                     await clearTokens();
                     setUser(null);
                     await AsyncStorage.removeItem('user');
-                    router.replace('/');
+                    router.replace('/map');
                     throw e;
                 }
             }
         );
 
         return () => {
-            api.interceptors.request.eject(reqId);
-            api.interceptors.response.eject(respId);
+            instance.interceptors.request.eject(reqId);
+            instance.interceptors.response.eject(respId);
+        };
+    }
+
+    useEffect(() => {
+        const ejectApi = attachAuthInterceptors(api);
+        const ejectDashboard = attachAuthInterceptors(dashboardApi);
+        const ejectDriver = attachAuthInterceptors(driverApi);
+
+        return () => {
+            ejectApi();
+            ejectDashboard();
+            ejectDriver();
         };
     }, [saveTokens, clearTokens]);
+
+
+
 
 
 // Отправка кода (регистрация/вход по SMS)
@@ -416,12 +468,26 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         phone: me.phone,
         type: 'car-owner',
         isVerified: true,
+
+        // плоские поля как есть из /client/me
+        username: me.username,
+        registered_at: me.registered_at,
+        last_wash: me.last_wash ?? null,
+        car_number: me.car_number,
+        car_body: me.car_body,     // может быть "2" строкой
+        brand: me.brand ?? null,
+        city: me.city ?? null,
+        color: me.color ?? null,
+        car_model: me.car_model ?? '',
+
+        // совместимость со старым UI
         carDetails: {
             ownerName: '',
             licensePlate: me.car_number,
-            brand: '',
-            model: '',
-            bodyType: toBodyName(me.car_body), // ← ключевая строка
+            brand: '',   // при желании можешь подтянуть имя бренда из справочника
+            model: me.car_model ?? '',
+            bodyType: toBodyName(me.car_body),
+            // color: — имя, если понадобится, можно сопоставить из справочника
         },
     });
 
@@ -432,6 +498,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         type: 'car-wash',
         isVerified: true,
         carWashDetails: {
+            id: me.car_id,
             name: me.name ?? '',
             address: me.address ?? '',
             phone: me.phone ?? '',
@@ -468,13 +535,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             });
 
             await saveTokens(access, refresh);
-            const meResp = await api.get('/client/me/'); // Authorization уже подставится
+            const meResp = await api.get('/client/me/');
             const mapped = mapOwnerMeToUser(meResp.data);
             setUser(mapped);
             await saveUserSnapshot(mapped);
             setAuthUserStore(mapped);
             setClientMe(meResp.data);
-            router.replace('/car-owner');
+            router.replace('/map');
             return {success: true};
         } catch (err: any) {
             console.log('[AUTH] registerDriver error:', err?.response?.data || err?.message || err);
@@ -648,6 +715,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             console.log('Error logging out:', error);
         }
     }, [clearTokens]);
+
+
     const contextValue = useMemo(() => ({
         user,
         setUser,

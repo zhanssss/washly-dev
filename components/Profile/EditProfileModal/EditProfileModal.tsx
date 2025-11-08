@@ -1,15 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, TextInput, Image, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+    Modal,
+    View,
+    Text,
+    TouchableOpacity,
+    ScrollView,
+    TextInput,
+    Image,
+    ActivityIndicator,
+    Alert,
+} from 'react-native';
+import { useAuthStore } from '@/src/stores/authStore';
+import { saveUserSnapshot } from '@/src/auth/token';
 import { Camera, X, User } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useReferenceData } from '@/src/stores/useReferenceData';
 import { colors } from '@/assets/Theme/colors';
-import { trpc } from '@/lib/trpc';
-import { useAuth } from '@/contexts/AuthContext';
+import { api, useAuth } from '@/contexts/AuthContext';
 import { styles } from './EditProfileModal.styles';
 import SelectList from '@/components/SelectList';
-import { CAR_BRANDS, getModelsByBrand } from '@/src/data/carBrands';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
@@ -18,145 +28,165 @@ type Props = {
 };
 
 const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
+    const accessToken = useAuthStore((s) => s.accessToken);
+    const clientMe = useAuthStore((s) => s.clientMe);
     const { user, setUser } = useAuth();
     const insets = useSafeAreaInsets();
 
-    const { carBodyTypes, load, loading: refLoading } = useReferenceData();
+    const {
+        brands,
+        colors: colorList,
+        cities,
+        carBodyTypes,
+        load,
+        loading: refLoading,
+    } = useReferenceData();
 
-    const [name, setName] = useState<string>(user?.name || user?.carDetails?.ownerName || '');
-    const [licensePlate, setLicensePlate] = useState<string>(user?.carDetails?.licensePlate || '');
-    const [brand, setBrand] = useState<string>(user?.carDetails?.brand || '');
-    const [model, setModel] = useState<string>(user?.carDetails?.model || '');
-    const [color, setColor] = useState<string>(user?.carDetails?.color || '');
-    const [avatarUri, setAvatarUri] = useState<string | null>(null);
+    // Внутренние поля формы — в терминах /client/me
+    const [name, setName] = useState<string>('');
+    const [licensePlate, setLicensePlate] = useState<string>('');
+    const [brandId, setBrandId] = useState<number | null>(null);
+    const [model, setModel] = useState<string>('');
+    const [colorId, setColorId] = useState<number | null>(null);
+    const [cityId, setCityId] = useState<number | null>(null);
     const [selectedBodyId, setSelectedBodyId] = useState<number | null>(null);
+
+    const [avatarUri, setAvatarUri] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
-    const updateOwnerMutation = trpc.profile.updateCarOwner.useMutation();
-    const uploadPhotoMutation = trpc.profile.uploadPhoto.useMutation();
-
-    const bodyNameById = useMemo(() => {
-        const m = new Map(carBodyTypes.map(b => [b.id, b.name]));
-        return (id?: number | null) => (id && m.get(id)) || '';
-    }, [carBodyTypes]);
-
-// элементы для SelectList
-    const brandItems = useMemo(
-        () => CAR_BRANDS.map(b => ({ id: b.name, name: b.name })),
-        []
-    );
-
-// имя кузова по выбранному id
-    const selectedBodyName = useMemo(
-        () => bodyNameById(selectedBodyId) || '',
-        [selectedBodyId, bodyNameById]
-    );
-
-// модели — только под выбранный кузов (если кузов не выбран, показываем все модели бренда)
-    const modelItems = useMemo(
-        () => (brand
-            ? getModelsByBrand(brand, selectedBodyName || undefined).map(m => ({ id: m, name: m }))
-            : []),
-        [brand, selectedBodyName]
-    );
-
-    // если юзер поменял кузов/марку — удаляем несоответствующую модель
+    // Подгружаем справочники, когда модалка открывается
     useEffect(() => {
-        if (!brand || !model) return;
-        const allowed = getModelsByBrand(brand, selectedBodyName || undefined);
-        if (!allowed.includes(model)) {
-            setModel('');
-        }
-    }, [brand, selectedBodyName]); // model в зависимостях не нужен — мы его здесь сбрасываем
+        if (visible) load(accessToken);
+    }, [visible, accessToken, load]);
 
-
-
+    // Префилл полей формы из clientMe (первично) и user (бэкап)
     useEffect(() => {
         if (!visible) return;
-        if (!carBodyTypes.length) load();
-    }, [visible]);
 
-    useEffect(() => {
-        if (!visible || !carBodyTypes.length) return;
-        const bodyName = user?.carDetails?.bodyType?.toLowerCase?.() || '';
-        const found = carBodyTypes.find(b => b.name.toLowerCase() === bodyName);
-        if (found) setSelectedBodyId(found.id);
-    }, [visible, carBodyTypes.length]);
+        const u = user;
+        const cm = clientMe;
+
+        setName(u?.username ?? cm?.username ?? '');
+        setLicensePlate(
+            u?.car_number ?? cm?.car_number ?? u?.carDetails?.licensePlate ?? ''
+        );
+        setModel(u?.car_model ?? cm?.car_model ?? u?.carDetails?.model ?? '');
+        setBrandId((u?.brand ?? cm?.brand) ?? null);
+        setCityId((u?.city ?? cm?.city) ?? null);
+        setColorId((u?.color ?? cm?.color) ?? null);
+
+        const body =
+            (typeof u?.car_body === 'number' ? u?.car_body : undefined) ??
+            (typeof cm?.car_body === 'number' ? cm?.car_body : undefined) ??
+            null;
+        setSelectedBodyId(body);
+    }, [visible, user, clientMe]);
 
     const pickFrom = async (source: 'camera' | 'library') => {
         try {
-            if (source === 'camera') {
-                const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                if (status !== 'granted') { Alert.alert('Разрешение', 'Нужен доступ к камере'); return; }
-                const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1,1], quality: 0.8 });
-                if (r.canceled || !r.assets[0]) return;
-                const img = await ImageManipulator.manipulateAsync(
-                    r.assets[0].uri,
-                    [{ resize: { width: 300, height: 300 } }],
-                    { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-                );
-                setAvatarUri(img.uri);
-            } else {
-                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                if (status !== 'granted') { Alert.alert('Разрешение', 'Нужен доступ к галерее'); return; }
-                const r = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1,1], quality: 0.8 });
-                if (r.canceled || !r.assets[0]) return;
-                const img = await ImageManipulator.manipulateAsync(
-                    r.assets[0].uri,
-                    [{ resize: { width: 300, height: 300 } }],
-                    { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-                );
-                setAvatarUri(img.uri);
+            const permission =
+                source === 'camera'
+                    ? await ImagePicker.requestCameraPermissionsAsync()
+                    : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+            if (permission.status !== 'granted') {
+                Alert.alert('Разрешение', 'Нет доступа к выбранному источнику');
+                return;
             }
+
+            const result =
+                source === 'camera'
+                    ? await ImagePicker.launchCameraAsync({
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                    })
+                    : await ImagePicker.launchImageLibraryAsync({
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                    });
+
+            if (result.canceled || !result.assets[0]) return;
+
+            const img = await ImageManipulator.manipulateAsync(
+                result.assets[0].uri,
+                [{ resize: { width: 300, height: 300 } }],
+                { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            setAvatarUri(img.uri);
         } catch {
             Alert.alert('Ошибка', 'Не удалось выбрать фото');
         }
     };
 
-
-
     const onSave = async () => {
-        if (!licensePlate.trim()) return Alert.alert('Профиль', 'Введите гос. номер');
-        if (!selectedBodyId) return Alert.alert('Профиль', 'Выберите тип кузова');
+        if (!licensePlate.trim())
+            return Alert.alert('Профиль', 'Введите гос. номер');
+        if (!selectedBodyId)
+            return Alert.alert('Профиль', 'Выберите тип кузова');
 
         try {
             setSaving(true);
 
-            if (avatarUri) {
-                try {
-                    await uploadPhotoMutation.mutateAsync({
-                        userId: user?.id || 'default',
-                        photoUri: avatarUri,
-                        type: 'car-owner',
-                    });
-                } catch {}
-            }
-
             const payload = {
-                userId: user?.id || 'default',
-                name: name?.trim() ? name.trim() : undefined,
-                phone: user?.phone || undefined,
+                id: user?.id,
+                phone: user?.phone,
+                registered_at: user?.registered_at,
+                username: name?.trim() || user?.username,
+                car_number: licensePlate.trim().toUpperCase(),
+                car_body: selectedBodyId,
+                last_wash: user?.last_wash ?? null,
+                brand: brandId ?? user?.brand ?? null,
+                city: cityId ?? user?.city ?? null,
+                color: colorId ?? user?.color ?? null,
+                car_model: model || user?.car_model || '',
+            };
+
+            await api.patch('/client/me/', payload);
+
+            // Рефетчим каноничный профиль
+            const meResp = await api.get('/client/me/');
+            const fresh = meResp.data as any;
+
+            // Имя кузова для блока carDetails
+            const bodyName =
+                carBodyTypes.find((b) => b.id === Number(fresh.car_body))?.name ??
+                (user?.carDetails?.bodyType ?? '');
+
+            // Собираем nextUser для AuthContext
+            const nextUser = {
+                ...(user as any),
+                username: fresh.username,
+                registered_at: fresh.registered_at,
+                last_wash: fresh.last_wash ?? null,
+                car_number: fresh.car_number,
+                car_body: fresh.car_body,
+                brand: fresh.brand ?? null,
+                city: fresh.city ?? null,
+                color: fresh.color ?? null,
+                car_model: fresh.car_model ?? '',
                 carDetails: {
-                    ownerName: name?.trim() || user?.carDetails?.ownerName || '',
-                    licensePlate: licensePlate.trim().toUpperCase(),
-                    brand: brand?.trim() || user?.carDetails?.brand || '',
-                    model: model || (user?.carDetails?.model ?? ''), // <-- селект модели (опционально)
-                    bodyType: bodyNameById(selectedBodyId) || (user?.carDetails?.bodyType ?? ''),
-                    color: color.trim() || undefined,          // опционально
+                    ...(user as any)?.carDetails,
+                    licensePlate: fresh.car_number,
+                    model: fresh.car_model ?? '',
+                    bodyType: bodyName,
+                    // Если нужно имя цвета — можно сопоставить из colorList здесь
+                    // color: colorList.find(c => c.id === fresh.color)?.name ?? ...
                 },
-            } as const;
+            };
 
+            // 1) Обновляем контекст
+            setUser(nextUser);
 
-            await updateOwnerMutation.mutateAsync(payload);
+            // 2) Обновляем персист-снапшот
+            await saveUserSnapshot(nextUser);
 
-            setUser(prev => prev ? {
-                ...prev,
-                name: payload.name ?? prev.name,
-                carDetails: {
-                    ...(prev.carDetails || { ownerName: '', licensePlate: '', brand: '', model: '', bodyType: '' }),
-                    ...payload.carDetails,
-                }
-            } : prev);
+            // 3) Обновляем zustand (clientMe + user)
+            const { setClientMe, setAuthUser: setAuthUserStore } =
+                useAuthStore.getState();
+            setClientMe(fresh);
+            setAuthUserStore(nextUser);
 
             Alert.alert('Профиль', 'Данные обновлены');
             onClose();
@@ -168,9 +198,13 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
     };
 
     return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+        <Modal
+            visible={visible}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={onClose}
+        >
             <View style={styles.container}>
-                {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.title}>РЕДАКТИРОВАНИЕ ПРОФИЛЯ</Text>
                     <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -178,8 +212,10 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-                    {/* Фото */}
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.content}
+                >
                     <View style={styles.avatarWrap}>
                         <TouchableOpacity
                             onPress={() =>
@@ -196,15 +232,14 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                             ) : (
                                 <User color={colors.accent} size={40} />
                             )}
-                            <View style={styles.cameraBadge}>
-                                <Camera color="#fff" size={14} />
+                            <View style={!avatarUri && styles.cameraBadge}>
+                                {!avatarUri ? <Camera color="#fff" size={14} /> : <></>}
                             </View>
                         </TouchableOpacity>
-                        <Text style={styles.avatarHint}>Фото — необязательно</Text>
+                        <Text style={styles.avatarHint}>Фото</Text>
                     </View>
 
-                    {/* Имя */}
-                    <Text style={styles.label}>Имя (необязательно)</Text>
+                    <Text style={styles.label}>Имя</Text>
                     <TextInput
                         value={name}
                         onChangeText={setName}
@@ -213,18 +248,16 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                         style={styles.input}
                     />
 
-                    {/* Гос номер */}
                     <Text style={styles.label}>Гос. номер *</Text>
                     <TextInput
                         autoCapitalize="characters"
                         value={licensePlate}
-                        onChangeText={t => setLicensePlate(t.toUpperCase())}
+                        onChangeText={(t) => setLicensePlate(t.toUpperCase())}
                         placeholder="123ABC"
                         placeholderTextColor="#9CA3AF"
                         style={styles.input}
                     />
 
-                    {/* Кузов */}
                     <Text style={styles.label}>Тип кузова *</Text>
                     {refLoading ? (
                         <View style={styles.loader}>
@@ -232,7 +265,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                         </View>
                     ) : (
                         <View style={styles.bodyWrap}>
-                            {carBodyTypes.map(b => {
+                            {carBodyTypes.map((b) => {
                                 const active = selectedBodyId === b.id;
                                 return (
                                     <TouchableOpacity
@@ -240,67 +273,85 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                                         onPress={() => setSelectedBodyId(b.id)}
                                         style={[styles.chip, active && styles.chipActive]}
                                     >
-                                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{b.name}</Text>
+                                        <Text
+                                            style={[styles.chipText, active && styles.chipTextActive]}
+                                        >
+                                            {b.name}
+                                        </Text>
                                     </TouchableOpacity>
                                 );
                             })}
                         </View>
                     )}
 
-                    <Text style={styles.label}>Марка (необязательно)</Text>
+                    <Text style={styles.label}>Марка</Text>
                     <SelectList
-                        items={brandItems}
-                        selectedId={brand || null}
-                        onSelect={(id) => {
-                            setBrand(String(id));
-                            setModel(''); // сброс модели при смене марки
-                        }}
+                        items={brands.map((b) => ({ id: b.id, name: b.name }))}
+                        selectedId={brandId}
+                        onSelect={(id) => setBrandId(Number(id))}
                         placeholder="Выберите марку"
                         safeTop={insets.top}
                         safeBottom={insets.bottom}
                     />
 
-                    <View style={styles.spacer12} />
+                    <Text style={styles.label}>Модель</Text>
+                    <TextInput
+                        value={model}
+                        onChangeText={setModel}
+                        placeholder="Введите модель"
+                        placeholderTextColor="#9CA3AF"
+                        style={styles.input}
+                    />
 
-                    <Text style={styles.label}>Модель (необязательно)</Text>
+                    <Text style={styles.label}>Цвет</Text>
+                    <View style={styles.colorGrid}>
+                        {colorList.map((c) => {
+                            const active = colorId === c.id;
+                            return (
+                                <TouchableOpacity
+                                    key={c.id}
+                                    onPress={() => setColorId(c.id)}
+                                    style={[
+                                        styles.colorDotWrap,
+                                        active && styles.colorDotWrapActive,
+                                    ]}
+                                    activeOpacity={0.9}
+                                >
+                                    <View
+                                        style={[
+                                            styles.colorDot,
+                                            active && styles.colorDotActive,
+                                            { backgroundColor: c.hex_code },
+                                        ]}
+                                    />
+                                    <Text style={styles.colorName} numberOfLines={1}>
+                                        {c.name}
+                                    </Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <Text style={styles.label}>Город</Text>
                     <SelectList
-                        items={modelItems}
-                        selectedId={model || null}
-                        onSelect={(id) => setModel(String(id))}
-                        placeholder={
-                            !brand
-                                ? 'Сначала выберите марку'
-                                : selectedBodyName
-                                    ? `Модели для кузова: ${selectedBodyName}`
-                                    : 'Выберите модель'
-                        }
+                        items={cities.map((c) => ({ id: c.id, name: c.name }))}
+                        selectedId={cityId}
+                        onSelect={(id) => setCityId(Number(id))}
+                        placeholder="Выберите город"
                         safeTop={insets.top}
                         safeBottom={insets.bottom}
-                        triggerStyle={!brand ? { opacity: 0.6 } : undefined}
                     />
 
-                    <View style={styles.spacer12} />
-
-                    {/* Цвет */}
-                    <Text style={styles.label}>Цвет (необязательно)</Text>
-                    <TextInput
-                        value={color}
-                        onChangeText={setColor}
-                        placeholder="Белый"
-                        placeholderTextColor="#9CA3AF"
-                        style={styles.inputLast}
-                    />
-
-                    {/* Actions */}
                     <View style={styles.actions}>
                         <TouchableOpacity
                             disabled={saving}
                             onPress={onSave}
                             style={[styles.primaryButton, saving && { opacity: 0.6 }]}
                         >
-                            <Text style={styles.primaryButtonText}>{saving ? 'СОХРАНЯЕМ…' : 'СОХРАНИТЬ'}</Text>
+                            <Text style={styles.primaryButtonText}>
+                                {saving ? 'СОХРАНЯЕМ…' : 'СОХРАНИТЬ'}
+                            </Text>
                         </TouchableOpacity>
-
                         <TouchableOpacity onPress={onClose} style={styles.secondaryButton}>
                             <Text style={styles.secondaryButtonText}>ОТМЕНА</Text>
                         </TouchableOpacity>

@@ -444,6 +444,7 @@ export const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         backgroundColor: colors.card, paddingVertical: 16, borderRadius: 12, gap: 12,
         borderWidth: 2, borderColor: colors.danger,
+        margin: 10,
     },
     profileLogoutText: {fontSize: 16, fontWeight: '700' as const, color: colors.danger, letterSpacing: 1},
 
