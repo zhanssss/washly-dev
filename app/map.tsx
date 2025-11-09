@@ -41,6 +41,11 @@ import {
 } from '@/src/services/api/carWashesApi';
 import OwnerHeader from "@/components/OwnerHeader/OwnerHeader";
 import {GIS_API_KEY} from '@/src/config/env'
+import SelectList from '@/components/SelectList';
+import { useReferenceData } from '@/src/stores/useReferenceData';
+import { MapPin } from 'lucide-react-native';
+import { getCenterByName } from '@/src/constants/cityCenters';
+
 export default function MapScreen() {
     const insets = useSafeAreaInsets();
     const {lat, lng} = useLocalSearchParams<{ focusId?: string; lat?: string; lng?: string }>();
@@ -119,6 +124,16 @@ export default function MapScreen() {
         const byName = new Map(extrasCatalog.map(e => [norm(e.name), e.id]));
         return uniqNums(namesFromBooking.map((n: string) => byName.get(norm(n))).filter((v): v is number => typeof v === 'number'));
     }
+    const { cities, load: loadRef } = useReferenceData();
+    const [selectedCityId, setSelectedCityId] = useState<number | string | null>(null);
+    const selectedCityName = useMemo(
+        () => cities.find(c => String(c.id) === String(selectedCityId))?.name ?? null,
+        [cities, selectedCityId]
+    );
+
+// один раз тянем справочники
+    useEffect(() => { loadRef().catch(() => {}); }, []);
+
 
     async function prefillExtrasFromBookingAndPoll({
                                                        token, pollSelectedIds, booking, extrasCatalog,
@@ -532,13 +547,13 @@ export default function MapScreen() {
         };
     }, []);
 
-    const center = useMemo(
-        () =>
-            lat && lng
-                ? {latitude: Number(lat), longitude: Number(lng)}
-                : {latitude: 43.222, longitude: 76.8512},
-        [lat, lng]
-    );
+    const initialCenter =
+        (lat && lng)
+            ? { latitude: Number(lat), longitude: Number(lng) }
+            : { latitude: 43.2383, longitude: 76.9455 }; // Almaty по умолчанию
+
+    const [center, setCenter] = useState(initialCenter);
+
 
     const openBooking = (cw: CarWash) => {
         setSelectedWash(cw);
@@ -612,6 +627,8 @@ export default function MapScreen() {
         }
 
 
+
+
         // Цена — если у карточки есть minPrice/maxPrice/avgPrice
         const [minP, maxP] = filters.priceRange;
         if (Number.isFinite(minP) || Number.isFinite(maxP)) {
@@ -663,6 +680,22 @@ export default function MapScreen() {
         else ref.open();
     };
 
+    useEffect(() => {
+        if (!selectedCityName) return;
+
+        // 1) применим фильтр по городу (ты уже используешь filters.city)
+        setFilters(prev => ({ ...prev, city: selectedCityName }));
+
+        // 2) центрируем карту
+        const next = getCenterByName(selectedCityName);
+        if (next) {
+            setCenter(next);
+            // если нужна анимация зума — дерни метод карты (если поддерживается)
+            mapRef.current?.focusOn?.(null, { duration: 500, zoom: 12, center: next });
+        }
+    }, [selectedCityName]);
+
+
     // @ts-ignore
     return (
         <View style={styles.container}>
@@ -670,6 +703,31 @@ export default function MapScreen() {
             <SafeAreaView edges={['top']} style={{backgroundColor: '#fff'}}>
                 <OwnerHeader/>
             </SafeAreaView>
+            <View style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingBottom: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <MapPin size={16} color="#14213D" />
+                    <View style={{ flex: 1 }}>
+                        <SelectList
+                            items={cities.map(c => ({ id: c.id, name: c.name }))}
+                            selectedId={selectedCityId}
+                            onSelect={(id) => setSelectedCityId(id)}
+                            placeholder="Выбрать город"
+                            safeTop={insets.top}
+                            triggerStyle={{
+                                height: 56,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor: '#E6E6E6',
+                                backgroundColor: '#F9F9F9',
+                                paddingHorizontal: 12,
+                                justifyContent: 'center'
+                            }}
+                            textStyle={{ color: '#14213D', fontWeight: '600' }}
+                        />
+                    </View>
+                </View>
+            </View>
+
             <QRScanner
                 isVisible={showQRScanner}
                 onScan={handleQRScan}
