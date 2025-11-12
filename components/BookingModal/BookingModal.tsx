@@ -207,7 +207,7 @@ export default function BookingModal({
         try {
             setReplacing(true);
             if (oldId) {
-                await cancelDriverBooking(oldId, accessToken);
+                await cancelDriverBooking(oldId);
             }
             const payload = { ...lastPayloadRef.current };
             delete (payload as any).replace_existing;
