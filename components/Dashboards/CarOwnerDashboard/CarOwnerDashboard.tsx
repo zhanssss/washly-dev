@@ -1340,17 +1340,6 @@ export function CarOwnerDashboard() {
                                 <Edit color="#FF6B35" size={20}/>
                                 <Text style={styles.settingsItemText}>Редактировать профиль</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => {
-                                    setShowProfile(false);
-                                    router.push('/subscription');
-                                }}
-                            >
-                                <Crown color="#FF6B35" size={20}/>
-                                <Text style={styles.settingsItemText}>Подписка</Text>
-                            </TouchableOpacity>
-
                             <TouchableOpacity style={styles.settingsItem} onPress={handleNotificationsSettings}>
                                 <Bell color="#FF6B35" size={20}/>
                                 <Text style={styles.settingsItemText}>Уведомления</Text>
