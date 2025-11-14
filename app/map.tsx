@@ -41,7 +41,7 @@ import type {BookingSlot} from '@/src/data/carWashes';
 
 import OwnerHeader from "@/components/OwnerHeader/OwnerHeader";
 import {GIS_API_KEY} from '@/src/config/env'
-import SelectList from '@/components/SelectList';
+import SelectList from '@/components/SelectList/SelectList';
 import {useReferenceData} from '@/src/stores/useReferenceData';
 
 import {getCenterByName} from '@/src/constants/cityCenters';

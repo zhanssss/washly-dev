@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import {styles} from '../CarWashDashboard.styles';
-import SelectList from '@/components/SelectList';
+import SelectList from '@/components/SelectList/SelectList';
 import {MapPin, Plus, Minus, Upload, X} from 'lucide-react-native';
 import {api} from '@/contexts/AuthContext';
 import {useAuthStore} from '@/src/stores/authStore';

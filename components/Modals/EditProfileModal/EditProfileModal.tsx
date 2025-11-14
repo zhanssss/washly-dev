@@ -19,7 +19,7 @@ import { useReferenceData } from '@/src/stores/useReferenceData';
 import { colors } from '@/assets/Theme/colors';
 import { api, useAuth } from '@/contexts/AuthContext';
 import { styles } from './EditProfileModal.styles';
-import SelectList from '@/components/SelectList';
+import SelectList from '@/components/SelectList/SelectList';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
