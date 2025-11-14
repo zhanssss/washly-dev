@@ -424,7 +424,7 @@ export default function AuthScreen() {
                         >
                             <Car color="#fff" size={24}/>
                             <Text style={styles.primaryButtonText}>Я ВЛАДЕЛЕЦ АВТО</Text>
-                            <Text style={styles.buttonSubtext}>Хочу безлимитную мойку</Text>
+                            {/*<Text style={styles.buttonSubtext}>Хочу безлимитную мойку</Text>*/}
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.secondaryButton}
@@ -432,8 +432,8 @@ export default function AuthScreen() {
                             disabled={isLoading}
                         >
                             <Waves color="#14213D" size={24}/>
-                            <Text style={styles.secondaryButtonText}>Я ВЛАДЕЛЕЦ АВТОМОЙКИ</Text>
-                            <Text style={styles.buttonSubtext}>Хочу больше клиентов</Text>
+                            <Text style={styles.secondaryButtonText}>Я ПАРТЕНР</Text>
+                            {/*<Text style={styles.buttonSubtext}>Хочу больше клиентов</Text>*/}
                         </TouchableOpacity>
                     </View>
                 </View>
