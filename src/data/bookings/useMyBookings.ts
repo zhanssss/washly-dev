@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import type { MyBooking, BookingStatus } from '@/src/types/bookings';
 import { fetchDriverMyBookings, type DriverMyBookingDto, cancelDriverBooking } from '@/src/services/api/bookingsApi';
+import { useAuthStore } from '@/src/stores/authStore';
 
 const toMinutes = (hhmm: string) => {
     const [h, m] = hhmm.split(':').map(Number);
@@ -47,8 +48,15 @@ const confirm = (title: string, message: string) =>
 export function useMyBookings() {
     const [myBookings, setMyBookings] = useState<MyBooking[]>([]);
     const [cancelingId, setCancelingId] = useState<string | null>(null);
+    const accessToken = useAuthStore(state => state.accessToken);
 
     const load = useCallback(async () => {
+        // если нет access — не дергаем API вообще
+        if (!accessToken) {
+            setMyBookings([]);
+            return [] as MyBooking[];
+        }
+
         try {
             const raw = await fetchDriverMyBookings();
             const mapped = raw.map(mapDto);
@@ -64,12 +72,16 @@ export function useMyBookings() {
             const result = [...booked, ...history];
             setMyBookings(result);
             return result;
-        } catch (e) {
-            console.warn('load my bookings failed', e);
+        } catch (e: any) {
+            // "No refresh" — нормальная ситуация, когда нет refresh-токена
+            const msg = e?.message ?? '';
+            if (msg !== 'No refresh') {
+                console.warn('load my bookings failed', e);
+            }
             setMyBookings([]);
             return [] as MyBooking[];
         }
-    }, []);
+    }, [accessToken]);
 
     useEffect(() => {
         load();

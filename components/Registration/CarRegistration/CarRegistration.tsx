@@ -11,7 +11,7 @@ import {KeyboardAvoidingView} from 'react-native';
 import {useAuth} from '@/contexts/AuthContext';
 import {useAuthStore} from '@/src/stores/authStore';
 import {useReferenceData} from '@/src/stores/useReferenceData';
-import SelectList from '@/components/SelectList';
+import SelectList from '@/components/SelectList/SelectList';
 import {styles} from './CarRegistration.styles';
 
 const DismissKeyboard: React.FC<React.PropsWithChildren> = ({children}) => (

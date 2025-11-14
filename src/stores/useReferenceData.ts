@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import axios from "axios";
-import { api } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/src/config/env";
 
 type CarBody = { id: number; name: string };
@@ -41,9 +40,6 @@ export const useReferenceData = create<ReferenceState>()(
                         axios.get(`${API_BASE_URL}/api/cities/`),
                         axios.get(`${API_BASE_URL}/api/car_body/`),
                     ]);
-
-                    console.log("carBodyRes.data:", carBodyRes.data);
-                    console.log("carBodyRes.status:", carBodyRes.status);
 
                     const brands: Brand[] = (Array.isArray(brandsRes.data) ? brandsRes.data : []).map(
                         (b: { id: number; name: string }) => ({

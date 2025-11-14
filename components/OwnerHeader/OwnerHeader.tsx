@@ -9,7 +9,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '@/assets/Theme/colors';
 import { styles } from './OwnerHeader.styles'; // вынесите стили сюда из CarOwnerDashboard.styles
-import EditProfileModal from '@/components/Profile/EditProfileModal/EditProfileModal';
+import EditProfileModal from '@/components/Modals/EditProfileModal/EditProfileModal';
 type Notification = {
     id: string; title: string; message: string;
     type: 'reminder' | 'booking' | 'promo'; timestamp: Date; read: boolean;
@@ -90,10 +90,10 @@ export default function OwnerHeader() {
                 </View>
 
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.subscriptionHeaderButton} onPress={() => router.push('/subscription')}>
-                        <Crown color={colors.accent} size={16} />
-                        <Text style={styles.subscriptionHeaderText}>ПРЕМИУМ</Text>
-                    </TouchableOpacity>
+                    {/*<TouchableOpacity style={styles.subscriptionHeaderButton} onPress={() => router.push('/subscription')}>*/}
+                    {/*    <Crown color={colors.accent} size={16} />*/}
+                    {/*    <Text style={styles.subscriptionHeaderText}>ПРЕМИУМ</Text>*/}
+                    {/*</TouchableOpacity>*/}
 
                     <TouchableOpacity onPress={() => setShowNotifications(true)} style={styles.notificationButton}>
                         <Bell color={colors.accent} size={20} />
@@ -135,10 +135,10 @@ export default function OwnerHeader() {
                                     {user?.username || user?.name || user?.carDetails?.ownerName || 'Пользователь'}
                                 </Text>
                                 <Text style={styles.profileUserPhone}>{user?.phone}</Text>
-                                <View style={styles.profileStatusBadge}>
-                                    <Crown color="#FFD700" size={12} />
-                                    <Text style={styles.profileStatusText}>VIP КЛИЕНТ</Text>
-                                </View>
+                                {/*<View style={styles.profileStatusBadge}>*/}
+                                {/*    <Crown color="#FFD700" size={12} />*/}
+                                {/*    <Text style={styles.profileStatusText}>VIP КЛИЕНТ</Text>*/}
+                                {/*</View>*/}
                             </View>
                         </View>
 
@@ -156,10 +156,10 @@ export default function OwnerHeader() {
                                 <Text style={styles.settingsItemText}>Редактировать профиль</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.settingsItem} onPress={() => { setShowProfile(false); router.push('/subscription'); }}>
-                                <Crown color="#FF6B35" size={20} />
-                                <Text style={styles.settingsItemText}>Подписка</Text>
-                            </TouchableOpacity>
+                            {/*<TouchableOpacity style={styles.settingsItem} onPress={() => { setShowProfile(false); router.push('/subscription'); }}>*/}
+                            {/*    <Crown color="#FF6B35" size={20} />*/}
+                            {/*    <Text style={styles.settingsItemText}>Подписка</Text>*/}
+                            {/*</TouchableOpacity>*/}
 
                             <TouchableOpacity style={styles.settingsItem} onPress={() => { setShowProfile(false); setShowNotificationsSettings(true); }}>
                                 <Bell color="#FF6B35" size={20} />

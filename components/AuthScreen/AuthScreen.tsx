@@ -38,7 +38,7 @@ const BackButton: React.FC<{ visible: boolean; onPress: () => void }> = ({visibl
     return (
         <TouchableOpacity
             onPress={onPress}
-            style={styles.backFab} // стиль добавим ниже в .styles.ts
+            style={styles.backFab}
             hitSlop={{top: 10, left: 10, right: 10, bottom: 10}}
         >
             <ArrowLeft color="#14213D" size={22}/>
@@ -46,31 +46,28 @@ const BackButton: React.FC<{ visible: boolean; onPress: () => void }> = ({visibl
     );
 };
 
-
 export default function AuthScreen() {
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const insets = useSafeAreaInsets();
-    const keyboardOffset = Platform.OS === 'ios' ? insets.top : 0; // если есть stack header, прибавь его высоту
+    const keyboardOffset = Platform.OS === 'ios' ? insets.top : 0;
 
+    // шаг verify УБРАЛИ — теперь верификация живёт на отдельной странице
+    const [step, setStep] = useState<'login' | 'choice' | 'reset-password' | 'registration'>('choice');
 
-    // Добавили шаг verify
-    const [step, setStep] = useState<'login' | 'choice' | 'reset-password' | 'registration' | 'verify'>('choice');
     const [resetCode, setResetCode] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [resetStep, setResetStep] = useState<'send-code' | 'verify-code' | 'new-password'>('send-code');
     const [loginAttempts, setLoginAttempts] = useState(0);
 
-    // Флаг: номер существует на бэке (нужно для навигации после verify)
+    // флаг про существование номера пока не используем, можно удалить если не нужен
     const [phoneExists, setPhoneExists] = useState<boolean | null>(null);
-    // Код из SMS для обычной верификации (не для сброса пароля)
-    const [smsCode, setSmsCode] = useState('');
 
     const {
         sendVerificationCode,
-        verifyCode: verifySmsCode,
+        // verifyCode здесь больше не нужен — верификация на отдельном экране
         loginWithPassword,
         sendPasswordResetCode,
         verifyPasswordResetCode,
@@ -84,15 +81,10 @@ export default function AuthScreen() {
         setPhone(curr => formatPhone(text, curr));
     }, []);
 
-
     const goBackStep = React.useCallback(() => {
-        // Блокируем выход, если идёт запрос
         if (isLoading) return true;
 
-        if (step === 'verify') {
-            setStep('registration');
-            return true;
-        }
+        // verify-экрана внутри больше нет
         if (step === 'registration') {
             setStep('choice');
             return true;
@@ -117,15 +109,14 @@ export default function AuthScreen() {
             }
         }
 
-        // На экране выбора (choice) — отдать управление ОС (закрыть экран/приложение)
         return false;
-    }, [step, resetStep, isLoading, setStep, setResetStep]);
+    }, [step, resetStep, isLoading]);
 
     React.useEffect(() => {
         if (Platform.OS !== 'android') return;
         const sub = BackHandler.addEventListener('hardwareBackPress', () => {
             const handled = goBackStep();
-            return true; // всегда перехватываем, чтобы не выходило внезапно
+            return true;
         });
         return () => sub.remove();
     }, [goBackStep]);
@@ -138,18 +129,18 @@ export default function AuthScreen() {
         try {
             if (type === 'car-owner') {
                 setUserType('car-owner');
-                if (phone) saveTempPhone(normalizePhone(phone)); // сохраняем нормализованный
-                setStep('registration'); // ввод телефона для регистрации
+                if (phone) saveTempPhone(normalizePhone(phone));
+                setStep('registration');
             } else {
                 setUserType('car-wash');
-                setStep('login');        // вход с паролем
+                setStep('login');
             }
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Регистрация (ввод телефона) → проверка на бэке → отправка SMS → шаг verify
+    // Регистрация (ввод телефона) → отправка SMS → ПЕРЕХОД НА /verification
     const handleRegistrationContinue = async () => {
         if (!phone || phone.length < 18) {
             Alert.alert('Ошибка', 'Введите корректный номер телефона');
@@ -163,31 +154,12 @@ export default function AuthScreen() {
                 Alert.alert('Ошибка', sent?.error || 'Не удалось отправить код');
                 return;
             }
+            // сохраняем номер в контекст (pendingPhone уже ставится внутри sendVerificationCode)
             saveTempPhone(apiPhone);
-            setStep('verify');
+            // идём на экран верификации кода
+            router.push('/verification');
         } catch {
             Alert.alert('Ошибка', 'Не удалось отправить код. Попробуйте позже.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Подтверждение 4-значного кода → роут в зависимости от exists
-    const handleVerifyCode = async () => {
-        if (smsCode.length !== 4) {
-            Alert.alert('Ошибка', 'Введите 4-значный код');
-            return;
-        }
-        setIsLoading(true);
-        try {
-            const res = await verifySmsCode(smsCode); // навигация происходит внутри
-            if (!res?.success) {
-                Alert.alert('Ошибка', res?.error || 'Неверный код');
-                return;
-            }
-            // ничего не делаем: роут уже выполнен в verifySmsCode
-        } catch {
-            Alert.alert('Ошибка', 'Не удалось подтвердить код');
         } finally {
             setIsLoading(false);
         }
@@ -201,21 +173,19 @@ export default function AuthScreen() {
         setConfirmPassword('');
         setResetStep('send-code');
         setLoginAttempts(0);
-        setSmsCode('');
         setPhoneExists(null);
     };
 
-    // ====== Сброс пароля ======
+    // ====== Сброс пароля (без изменений) ======
 
     const handleSendResetCode = async () => {
         const apiPhone = normalizePhone(phone);
         setIsLoading(true);
         try {
-            const res = await sendPasswordResetCode(apiPhone); // { success, message, debug }
+            const res = await sendPasswordResetCode(apiPhone);
             if (res.success) {
                 setResetStep('verify-code');
                 Alert.alert('Код отправлен', res.message || 'Проверьте SMS');
-                // (опционально) console.log('debug_code:', res.debug);
             } else {
                 Alert.alert('Ошибка', res.error || 'Не удалось отправить код');
             }
@@ -224,17 +194,14 @@ export default function AuthScreen() {
         }
     };
 
-
     const handleVerifyResetCode = async () => {
         if (resetCode.length !== 4) return Alert.alert('Ошибка', 'Введите 4-значный код');
         const apiPhone = normalizePhone(phone);
         setIsLoading(true);
         try {
-            const res = await verifyPasswordResetCode(apiPhone, resetCode); // { success, reset_token, ttl_minutes, error? }
+            const res = await verifyPasswordResetCode(apiPhone, resetCode);
             if (res.success) {
-                // token хранится в контексте, просто идём дальше
                 setResetStep('new-password');
-                // (опционально) показать таймер по res.ttl_minutes
             } else {
                 Alert.alert('Ошибка', res.error || 'Неверный код');
             }
@@ -243,14 +210,13 @@ export default function AuthScreen() {
         }
     };
 
-
     const handleResetPassword = async () => {
         if (newPassword.length < 6) return Alert.alert('Ошибка', 'Пароль минимум 6 символов');
         if (newPassword !== confirmPassword) return Alert.alert('Ошибка', 'Пароли не совпадают');
 
         setIsLoading(true);
         try {
-            const res = await resetPassword('', newPassword); // phone не нужен, можно передать ''
+            const res = await resetPassword('', newPassword);
             if (res.success) {
                 Alert.alert('Готово', res.message || 'Пароль сброшен. Войдите с новым паролем.', [
                     {text: 'OK', onPress: handleBackToLogin}
@@ -263,8 +229,7 @@ export default function AuthScreen() {
         }
     };
 
-
-    // ====== Вход (для автомойки и т.п.) ======
+    // ====== Вход (автомойка) ======
 
     const handleLogin = async () => {
         if (!password.trim()) return Alert.alert('Ошибка', 'Введите пароль');
@@ -291,7 +256,6 @@ export default function AuthScreen() {
                             }
                         }
                     ]);
-                } else {
                 }
             }
         } catch {
@@ -303,7 +267,7 @@ export default function AuthScreen() {
 
     // ====== Рендер шагов ======
 
-    // Сброс пароля — шаги
+    // Сброс пароля — шаги (оставил как было)
     if (step === 'reset-password') {
         if (resetStep === 'send-code') {
             return (
@@ -311,7 +275,6 @@ export default function AuthScreen() {
                     <DismissKeyboard>
                         <KeyboardAvoidingView style={styles.content}
                                               behavior={'height'}>
-
                             <View style={styles.header}>
                                 <View style={styles.iconContainer}><Lock color="#fff" size={32}/></View>
                                 <Text style={styles.title}>СБРОС ПАРОЛЯ</Text>
@@ -454,17 +417,23 @@ export default function AuthScreen() {
                         <Text style={styles.subtitle}>Выберите тип аккаунта</Text>
                     </View>
                     <View style={styles.buttonContainer}>
-                        <TouchableOpacity style={styles.primaryButton} onPress={() => handleUserTypeChoice('car-owner')}
-                                          disabled={isLoading}>
+                        <TouchableOpacity
+                            style={styles.primaryButton}
+                            onPress={() => handleUserTypeChoice('car-owner')}
+                            disabled={isLoading}
+                        >
                             <Car color="#fff" size={24}/>
                             <Text style={styles.primaryButtonText}>Я ВЛАДЕЛЕЦ АВТО</Text>
-                            <Text style={styles.buttonSubtext}>Хочу безлимитную мойку</Text>
+                            {/*<Text style={styles.buttonSubtext}>Хочу безлимитную мойку</Text>*/}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.secondaryButton}
-                                          onPress={() => handleUserTypeChoice('car-wash')} disabled={isLoading}>
+                        <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={() => handleUserTypeChoice('car-wash')}
+                            disabled={isLoading}
+                        >
                             <Waves color="#14213D" size={24}/>
-                            <Text style={styles.secondaryButtonText}>Я ВЛАДЕЛЕЦ АВТОМОЙКИ</Text>
-                            <Text style={styles.buttonSubtext}>Хочу больше клиентов</Text>
+                            <Text style={styles.secondaryButtonText}>Я ПАРТЕНР</Text>
+                            {/*<Text style={styles.buttonSubtext}>Хочу больше клиентов</Text>*/}
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -520,62 +489,7 @@ export default function AuthScreen() {
         );
     }
 
-    // Новый экран: ввод 4-значного кода для обычной аутентификации
-    if (step === 'verify') {
-        return (
-            <SafeAreaView style={styles.container}>
-                <KeyboardAvoidingView style={styles.content} behavior={'height'}>
-
-                    <View style={styles.header}>
-                        <View style={styles.iconContainer}><Lock color="#14213D" size={32}/></View>
-                        <Text style={styles.title}>ПОДТВЕРЖДЕНИЕ</Text>
-                        <Text style={styles.description}>
-                            Введите 4-значный код, отправленный{'\n'}
-                            на номер {phone}
-                        </Text>
-                    </View>
-                    <View style={styles.form}>
-                        <Text style={styles.label}>Код из SMS</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={smsCode}
-                            onChangeText={setSmsCode}
-                            placeholder="0000"
-                            placeholderTextColor="#666666"
-                            keyboardType="number-pad"
-                            maxLength={4}
-                        />
-                        <TouchableOpacity
-                            style={[styles.button, (smsCode.length !== 4 || isLoading) && styles.buttonDisabled]}
-                            onPress={handleVerifyCode}
-                            disabled={smsCode.length !== 4 || isLoading}
-                        >
-                            <Text style={styles.buttonText}>{isLoading ? 'ПРОВЕРКА...' : 'ПОДТВЕРДИТЬ'}</Text>
-                            <ArrowRight color="#fff" size={20}/>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.backButton, {marginTop: 12}]}
-                            onPress={handleRegistrationContinue}
-                            disabled={isLoading}
-                        >
-                            <Text style={styles.backButtonText}>Отправить код повторно</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.footer}>
-                        <TouchableOpacity style={styles.backButton} onPress={handleBackToLogin}
-                                          disabled={isLoading}>
-                            <Text style={styles.backButtonText}>Изменить номер</Text>
-                        </TouchableOpacity>
-                    </View>
-                </KeyboardAvoidingView>
-                <BackButton visible={showBack} onPress={goBackStep}/>
-            </SafeAreaView>
-        );
-    }
-
-    // Главный экран входа (для автомойки и т.п.)
+    // Главный экран входа
     return (
         <SafeAreaView style={styles.container}>
             <DismissKeyboard>
