@@ -20,9 +20,10 @@ import {fetchDashboardStats, type DashboardStatsResponse} from '@/src/services/a
 import {API_BASE_URL, GIS_API_KEY} from '@/src/config/env';
 import {buildStatsExportUrl, type StatsKind, type ExportFormat} from '@/src/services/api/exportsApi';
 import {downloadAndShare} from '@/src/utils/download';
+import SelectList from '@/components/SelectList';
 
 
-import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view'; // npm i react-native-keyboard-aware-scroll-view
+import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
 import {
     TrendingUp,
     Users,
@@ -32,11 +33,8 @@ import {
     BarChart3,
     ChevronDown,
     User,
-    Settings,
     X,
-    Phone,
     MapPin,
-    Shield,
     Plus,
     Minus,
     Upload, CoinsIcon,
@@ -55,6 +53,8 @@ import {
 import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 import TwoGisSearchModal from '@/components/Modals/TwoGisSearchModal/TwoGisSearchModal';
 import {useReferenceData} from '@/src/stores/useReferenceData';
+import SecuritySettingsModal from "@/components/Modals/SecuritySettingsModal/SecuritySettingsModal";
+import HelpModal from "@/components/Modals/HelpModal/HelpModal";
 
 type DashboardBooking = {
     id: number;
@@ -68,8 +68,8 @@ type DashboardBooking = {
     car_body: number;
     car_body_name: string;
     extra_services: number[];
-    total_price: string;       // приходит строкой "2000.00"
-    created_at: string;        // ISO с +05:00
+    total_price: string;
+    created_at: string;
 };
 
 
@@ -83,70 +83,6 @@ interface BookingsTrackerProps {
     onToggleFilters: () => void;
 }
 
-
-// Простой select-подобный список через Modal
-function SelectList<T extends { id: string; name: string }>(
-    {
-        items,
-        selectedId,
-        onSelect,
-        placeholder = 'Выбрать...',
-        safeTop = 0,
-        safeBottom = 0,   // 👈 добавили
-    }: {
-        items: T[];
-        selectedId: string | null;
-        onSelect: (id: string) => void;
-        placeholder?: string;
-        safeTop?: number;
-        safeBottom?: number;
-    }
-) {
-    const [open, setOpen] = React.useState(false);
-    const selected = items.find(i => i.id === selectedId);
-
-    return (
-        <View>
-            <TouchableOpacity onPress={() => setOpen(true)} style={styles.selectTrigger}>
-                <Text style={styles.selectText}>{selected ? selected.name : placeholder}</Text>
-                <ChevronDown color="#14213D" size={18}/>
-            </TouchableOpacity>
-
-            <Modal
-                visible={open}
-                animationType="slide"
-                statusBarTranslucent
-                presentationStyle="fullScreen"
-                onRequestClose={() => setOpen(false)}
-            >
-                <View style={[styles.modalContainer, {paddingTop: Math.max(safeTop, 12)}]}>
-                    <View style={styles.mapHeader}>
-                        <Text style={styles.mapHeaderTitle}>Выберите из списка</Text>
-                        <TouchableOpacity onPress={() => setOpen(false)}
-                                          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                            <X color="#14213D" size={22}/>
-                        </TouchableOpacity>
-                    </View>
-
-                    <ScrollView contentContainerStyle={[styles.listContent, {paddingBottom: safeBottom + 8}]}>
-                        {items.map(it => (
-                            <TouchableOpacity
-                                key={it.id}
-                                onPress={() => {
-                                    onSelect(it.id);
-                                    setOpen(false);
-                                }}
-                                style={[styles.listItem, selectedId === it.id && styles.listItemActive]}
-                            >
-                                <Text style={styles.listItemText}>{it.name}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-            </Modal>
-        </View>
-    );
-}
 
 
 function BookingsTracker({
@@ -269,8 +205,6 @@ function BookingsTracker({
         </View>
     );
 }
-
-/* ===================  НОВЫЙ ЭКРАН: АДМИН АВТОМОЙКИ  =================== */
 
 type BodyType = { id: string; name: string };
 type BaseService = { id: string; name: string };
@@ -888,8 +822,8 @@ function CarWashAdminScreen() {
                 onConfirm={(p) => {
                     if (p.id) setTwoGisPlaceId(p.id);
                     if (p.address) setPlaceAddress(p.address);
-                    if (typeof p.latitude === 'number') setLat(p.latitude);
-                    if (typeof p.longitude === 'number') setLon(p.longitude);
+                    setLat(p.latitude);
+                    setLon(p.longitude);
                     setIsMapOpen(false);
                 }}
             />
@@ -897,7 +831,6 @@ function CarWashAdminScreen() {
     );
 }
 
-//CarWashDashboard
 export default function CarWashDashboard() {
     const [selectedTab, setSelectedTab] = useState<'dashboard' | 'qr' | 'bookings' | 'carwash' | 'analytics'>('bookings');
     const activeBookingsRef = useRef<() => Promise<any> | void>(null);
@@ -1481,7 +1414,6 @@ export default function CarWashDashboard() {
                                                 Истекает через: {fmt(expiresIn)}
                                             </Text>
                                         </View>
-
                                         <View style={{marginTop: 16, gap: 10, width: '100%'}}>
                                             <TouchableOpacity style={styles.primaryBtn} onPress={resetSession}>
                                                 <Text style={[styles.primaryBtnText, styles.textWhite]}>Обновить
@@ -1591,129 +1523,16 @@ export default function CarWashDashboard() {
             </View>
 
             {/* Модалки «Безопасность» и «Помощь» */}
-            <Modal
+            <SecuritySettingsModal
                 visible={showSecuritySettings}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => setShowSecuritySettings(false)}
-            >
-                <View style={[styles.modalContainer, {paddingTop: insets.top}]}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>БЕЗОПАСНОСТЬ</Text>
-                        <TouchableOpacity onPress={() => setShowSecuritySettings(false)} style={styles.closeButton}>
-                            <X color="#14213D" size={24}/>
-                        </TouchableOpacity>
-                    </View>
+                onClose={() => setShowSecuritySettings(false)}
+            />
 
-                    <ScrollView style={styles.modalContent}>
-                        <View style={styles.settingsSection}>
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => {
-                                    Alert.alert('Смена пароля', 'Функция будет доступна в следующем обновлении');
-                                }}
-                            >
-                                <Shield color="#14213D" size={20}/>
-                                <Text style={styles.settingsItemText}>Сменить пароль</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => {
-                                    Alert.alert('Двухфакторная аутентификация', 'Функция будет доступна в следующем обновлении');
-                                }}
-                            >
-                                <Phone color="#14213D" size={20}/>
-                                <Text style={styles.settingsItemText}>Двухфакторная аутентификация</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => {
-                                    Alert.alert('Активные сессии', 'У вас 1 активная сессия на этом устройстве');
-                                }}
-                            >
-                                <Settings color="#14213D" size={20}/>
-                                <Text style={styles.settingsItemText}>Активные сессии</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.settingsItem}
-                                onPress={() => {
-                                    Alert.alert('Резервное копирование', 'Данные автоматически сохраняются в облаке');
-                                }}
-                            >
-                                <Settings color="#14213D" size={20}/>
-                                <Text style={styles.settingsItemText}>Резервное копирование</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </ScrollView>
-                </View>
-            </Modal>
-
-            <Modal
+            <HelpModal
                 visible={showHelpModal}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => setShowHelpModal(false)}
-            >
-                <View style={[styles.modalContainer, {paddingTop: insets.top}]}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>ПОМОЩЬ</Text>
-                        <TouchableOpacity onPress={() => setShowHelpModal(false)} style={styles.closeButton}>
-                            <X color="#14213D" size={24}/>
-                        </TouchableOpacity>
-                    </View>
+                onClose={() => setShowHelpModal(false)}
+            />
 
-                    <ScrollView style={styles.modalContent}>
-                        <View style={styles.helpSection}>
-                            <Text style={styles.helpSectionTitle}>РУКОВОДСТВО ДЛЯ ВЛАДЕЛЬЦЕВ</Text>
-
-                            <View style={styles.helpItem}>
-                                <Text style={styles.helpQuestion}>Как настроить QR-код?</Text>
-                                <Text style={styles.helpAnswer}>
-                                    Перейдите на вкладку QR-КОД, распечатайте код и разместите его в каждом боксе.
-                                    Клиенты смогут
-                                    сканировать его для подтверждения визитов.
-                                </Text>
-                            </View>
-
-                            <View style={styles.helpItem}>
-                                <Text style={styles.helpQuestion}>Как отслеживать загруженность?</Text>
-                                <Text style={styles.helpAnswer}>
-                                    Используйте вкладку ЗАПИСИ для мониторинга загруженности по часам и управления
-                                    записями клиентов.
-                                </Text>
-                            </View>
-
-                            <View style={styles.helpItem}>
-                                <Text style={styles.helpQuestion}>Как работает система оплаты?</Text>
-                                <Text style={styles.helpAnswer}>
-                                    Клиенты с подпиской могут мыться бесплатно. Обычные клиенты оплачивают через
-                                    приложение или наличными.
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.contactSection}>
-                            <Text style={styles.contactSectionTitle}>ПОДДЕРЖКА БИЗНЕСА</Text>
-                            <TouchableOpacity style={styles.contactItem}
-                                              onPress={() => Alert.alert('Телефон', '+7 (777) 123-45-67')}>
-                                <Phone color="#14213D" size={20}/>
-                                <Text style={styles.contactText}>Линия поддержки бизнеса</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.contactItem}
-                                onPress={() => Alert.alert('Email', 'business@carwash.kz')}
-                            >
-                                <Settings color="#14213D" size={20}/>
-                                <Text style={styles.contactText}>Техническая поддержка</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </ScrollView>
-                </View>
-            </Modal>
 
         </View>
     );

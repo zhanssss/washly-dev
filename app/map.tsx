@@ -127,7 +127,7 @@ export default function MapScreen() {
     }
 
     const {cities, load: loadRef} = useReferenceData();
-    const [selectedCityId, setSelectedCityId] = useState<number | string | null>(null);
+    const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
     const selectedCityName = useMemo(
         () => cities.find(c => String(c.id) === String(selectedCityId))?.name ?? null,
         [cities, selectedCityId]
@@ -753,7 +753,6 @@ export default function MapScreen() {
                     </View>
                 </View>
             </View>
-
             <QRScanner
                 isVisible={showQRScanner}
                 onScan={handleQRScan}
