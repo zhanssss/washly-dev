@@ -53,7 +53,7 @@ import {
     type CreateQrSessionResponse
 } from '@/src/services/api/qrApi';
 import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
-import TwoGisSearchModal from '@/components/TwoGisSearchModal';
+import TwoGisSearchModal from '@/components/Modals/TwoGisSearchModal/TwoGisSearchModal';
 import {useReferenceData} from '@/src/stores/useReferenceData';
 
 type DashboardBooking = {

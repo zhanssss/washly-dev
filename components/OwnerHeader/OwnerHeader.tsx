@@ -9,7 +9,7 @@ import {
 } from 'lucide-react-native';
 import { colors } from '@/assets/Theme/colors';
 import { styles } from './OwnerHeader.styles'; // вынесите стили сюда из CarOwnerDashboard.styles
-import EditProfileModal from '@/components/Profile/EditProfileModal/EditProfileModal';
+import EditProfileModal from '@/components/Modals/EditProfileModal/EditProfileModal';
 type Notification = {
     id: string; title: string; message: string;
     type: 'reminder' | 'booking' | 'promo'; timestamp: Date; read: boolean;

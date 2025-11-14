@@ -178,7 +178,7 @@ export default function MapModal({
             } else if (data.type === 'close') {
                 onClose();
             }
-            // data.types === 'candidate' — можешь отрисовать превью
+
         } catch {}
     };
 
@@ -191,7 +191,6 @@ export default function MapModal({
                     onMessage={onMessage}
                     javaScriptEnabled
                     domStorageEnabled
-
                     onShouldStartLoadWithRequest={() => true}
                     style={{ flex: 1 }}
                 />

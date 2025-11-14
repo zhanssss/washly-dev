@@ -311,7 +311,6 @@ export default function AuthScreen() {
                     <DismissKeyboard>
                         <KeyboardAvoidingView style={styles.content}
                                               behavior={'height'}>
-
                             <View style={styles.header}>
                                 <View style={styles.iconContainer}><Lock color="#fff" size={32}/></View>
                                 <Text style={styles.title}>СБРОС ПАРОЛЯ</Text>

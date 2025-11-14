@@ -7,7 +7,7 @@ import {GIS_API_KEY} from "@/src/config/env";
 
 // 👇 публичный хэндл
 export type CarWashMapHandle = {
-    focusOn: (id: string, opts?: { duration?: number; zoom?: number }) => void;
+    focusOn: (id: any, opts?: { duration: number; zoom: number }) => void;
 };
 
 type Props = {

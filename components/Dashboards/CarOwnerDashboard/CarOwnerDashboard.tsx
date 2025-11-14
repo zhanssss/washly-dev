@@ -17,7 +17,7 @@ import * as Location from 'expo-location';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import EditProfileModal from '@/components/Profile/EditProfileModal/EditProfileModal';
+import EditProfileModal from '@/components/Modals/EditProfileModal/EditProfileModal';
 import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 import OwnerHeader from '@/components/OwnerHeader/OwnerHeader';
 import {api, useAuth} from '@/contexts/AuthContext';
@@ -33,15 +33,15 @@ import {
 
 import type {BookingSlot} from '@/src/data/carWashes';
 import {fetch2gisMatrix, TravelInfo} from '@/src/services/api/distanceMatrix2gis';
-import QRScanner from '@/components/QR/QRScanner/QRScanner';
+import QRScanner from '@/components/Modals/QRScanner/QRScanner';
 import {router} from 'expo-router';
 import {trpc} from '@/lib/trpc';
 import {colors} from '@/assets/Theme/colors';
 
-import BookingModal from "@/components/BookingModal/BookingModal";
+import BookingModal from "@/components/Modals/BookingModal/BookingModal";
 import {useMyBookings} from '@/src/data/bookings/useMyBookings';
 import type {MyBooking} from '@/src/types/bookings';
-import FiltersModal from '@/components/Filter/FiltersModal';
+import FiltersModal from '@/components/Modals/Filter/FiltersModal';
 
 
 interface Notification {
