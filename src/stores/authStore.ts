@@ -13,12 +13,12 @@
         car_body: number;
         last_wash: string | null;
 
-        // ↓ новые поля, которые приходят в /client/me
         username?: string;
         brand?: number | null;
         city?: number | null;
         color?: number | null;
         car_model?: string;
+        photo?: string | null;
     };
 
 
@@ -59,7 +59,7 @@
         city?: number | null;
         color?: number | null;
         car_model?: string;
-
+        photo?: string | null;
         carDetails?: CarDetails;
         carWashDetails?: CarWashDetails;
     }

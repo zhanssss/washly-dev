@@ -7,7 +7,8 @@ import {
     ActivityIndicator,
     TextInput,
     KeyboardEventName, Alert,
-    Keyboard, Platform, Dimensions
+    Keyboard, Platform, Dimensions,
+    ImageBackground,
 } from 'react-native';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useLocalSearchParams} from 'expo-router';
@@ -29,7 +30,7 @@ import {ScrollView as GHScrollView} from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import BottomSheet, {BottomSheetFlatList} from '@gorhom/bottom-sheet';
 
-
+import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 import {SlidersHorizontal, MapPin} from 'lucide-react-native';
 import FiltersModal from '@/components/Modals/Filter/FiltersModal';
 import BottomNav from '@/components/BottomNav/BottomNav'
@@ -851,13 +852,32 @@ export default function MapScreen() {
                     }
                     //@ts-ignore
                     renderItem={({item}) => {
+                        const imgSource = item.image ? {uri: item.image} : placeholderWash;
+
                         return (
-                            <TouchableOpacity style={styles.listItem} onPress={() => focusOnMarker(item)}>
-                                <Text style={styles.listName}>{item.name}</Text>
-                                <Text style={styles.listAddress}>{item.address}</Text>
+                            <TouchableOpacity
+                                style={styles.listItem}
+                                onPress={() => focusOnMarker(item)}
+                                activeOpacity={0.9}
+                            >
+                                <ImageBackground
+                                    source={imgSource}
+                                    style={styles.listItemBg}
+                                    imageStyle={styles.listItemBgImage}
+                                >
+                                    <View style={styles.listItemOverlay} />
+
+                                    <View style={styles.listItemContent}>
+                                        <Text style={styles.listName}>{item.name}</Text>
+                                        <Text style={styles.listAddress} numberOfLines={2}>
+                                            {item.address}
+                                        </Text>
+                                    </View>
+                                </ImageBackground>
                             </TouchableOpacity>
                         );
                     }}
+
                 />
             </BottomSheet>
 

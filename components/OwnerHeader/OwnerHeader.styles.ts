@@ -18,6 +18,11 @@ export const styles = StyleSheet.create({
         alignItems: 'center', justifyContent: 'center',
         borderWidth: 2, borderColor: colors.accent,
     },
+    headerAvatarImage: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+    },
     userInfoContainer: {flex: 1, marginLeft: 12},
     userBasicInfo: {marginBottom: 2},
     carInfoInHeader: {marginTop: 2},
@@ -56,6 +61,11 @@ export const styles = StyleSheet.create({
     profileAvatar: {
         width: 60, height: 60, borderRadius: 30, backgroundColor: colors.surface,
         alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.primary,
+    },
+    profileAvatarImage: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
     },
     profileUserInfo: {flex: 1},
     profileUserName: {fontSize: 18, fontWeight: '700' as const, color: colors.text, marginBottom: 4},

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
     Modal,
     View,
@@ -10,27 +10,27 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { useAuthStore } from '@/src/stores/authStore';
-import { saveUserSnapshot } from '@/src/auth/token';
-import { Camera, X, User } from 'lucide-react-native';
+import {useAuthStore} from '@/src/stores/authStore';
+import {saveUserSnapshot} from '@/src/auth/token';
+import {Camera, X, User} from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { useReferenceData } from '@/src/stores/useReferenceData';
-import { colors } from '@/assets/Theme/colors';
-import { api, useAuth } from '@/contexts/AuthContext';
-import { styles } from './EditProfileModal.styles';
+import {useReferenceData} from '@/src/stores/useReferenceData';
+import {colors} from '@/assets/Theme/colors';
+import {api, useAuth} from '@/contexts/AuthContext';
+import {styles} from './EditProfileModal.styles';
 import SelectList from '@/components/SelectList/SelectList';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = {
     visible: boolean;
     onClose: () => void;
 };
 
-const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
+const EditProfileModal: React.FC<Props> = ({visible, onClose}) => {
     const accessToken = useAuthStore((s) => s.accessToken);
     const clientMe = useAuthStore((s) => s.clientMe);
-    const { user, setUser } = useAuth();
+    const {user, setUser} = useAuth();
     const insets = useSafeAreaInsets();
 
     const {
@@ -111,8 +111,8 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
 
             const img = await ImageManipulator.manipulateAsync(
                 result.assets[0].uri,
-                [{ resize: { width: 300, height: 300 } }],
-                { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+                [{resize: {width: 300, height: 300}}],
+                {compress: 0.8, format: ImageManipulator.SaveFormat.JPEG}
             );
             setAvatarUri(img.uri);
         } catch {
@@ -143,18 +143,35 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                 car_model: model || user?.car_model || '',
             };
 
-            await api.patch('/client/me/', payload);
+            // 👉 готовим FormData
+            const formData = new FormData();
+            Object.entries(payload).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    formData.append(key, String(value));
+                }
+            });
+
+            // если пользователь выбрал новое фото — прикрепляем файл
+            if (avatarUri) {
+                formData.append('photo', {
+                    uri: avatarUri,
+                    name: 'avatar.jpg',
+                    type: 'image/jpeg',
+                } as any);
+            }
+
+            await api.patch('/client/me/', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
 
             // Рефетчим каноничный профиль
             const meResp = await api.get('/client/me/');
             const fresh = meResp.data as any;
 
-            // Имя кузова для блока carDetails
             const bodyName =
                 carBodyTypes.find((b) => b.id === Number(fresh.car_body))?.name ??
                 (user?.carDetails?.bodyType ?? '');
 
-            // Собираем nextUser для AuthContext
             const nextUser = {
                 ...(user as any),
                 username: fresh.username,
@@ -166,23 +183,18 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                 city: fresh.city ?? null,
                 color: fresh.color ?? null,
                 car_model: fresh.car_model ?? '',
+                photo: fresh.photo ?? null,                // ⬅️ обновляем фото
                 carDetails: {
                     ...(user as any)?.carDetails,
                     licensePlate: fresh.car_number,
                     model: fresh.car_model ?? '',
                     bodyType: bodyName,
-                    // Если нужно имя цвета — можно сопоставить из colorList здесь
-                    // color: colorList.find(c => c.id === fresh.color)?.name ?? ...
                 },
             };
 
-            // 1) Обновляем контекст
             setUser(nextUser);
-
-            // 2) Обновляем персист-снапшот
             await saveUserSnapshot(nextUser);
 
-            // 3) Обновляем zustand (clientMe + user)
             const { setClientMe, setAuthUser: setAuthUserStore } =
                 useAuthStore.getState();
             setClientMe(fresh);
@@ -190,12 +202,15 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
 
             Alert.alert('Профиль', 'Данные обновлены');
             onClose();
+            setAvatarUri(null); // можно очистить локальный uri
         } catch (e: any) {
             Alert.alert('Ошибка', e?.message ?? 'Не удалось сохранить профиль');
         } finally {
             setSaving(false);
         }
     };
+
+    const currentAvatar = avatarUri || clientMe?.photo || (user as any)?.photo || null;
 
     return (
         <Modal
@@ -208,7 +223,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                 <View style={styles.header}>
                     <Text style={styles.title}>РЕДАКТИРОВАНИЕ ПРОФИЛЯ</Text>
                     <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                        <X color={colors.mutedText} size={20} />
+                        <X color={colors.mutedText} size={20}/>
                     </TouchableOpacity>
                 </View>
 
@@ -227,15 +242,16 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                             }
                             style={styles.avatarButton}
                         >
-                            {avatarUri ? (
-                                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                            {currentAvatar ? (
+                                <Image source={{ uri: currentAvatar }} style={styles.avatarImage} />
                             ) : (
                                 <User color={colors.accent} size={40} />
                             )}
-                            <View style={!avatarUri && styles.cameraBadge}>
-                                {!avatarUri ? <Camera color="#fff" size={14} /> : <></>}
+                            <View style={!currentAvatar && styles.cameraBadge}>
+                                {!currentAvatar ? <Camera color="#fff" size={14} /> : <></>}
                             </View>
                         </TouchableOpacity>
+
                         <Text style={styles.avatarHint}>Фото</Text>
                     </View>
 
@@ -261,7 +277,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                     <Text style={styles.label}>Тип кузова *</Text>
                     {refLoading ? (
                         <View style={styles.loader}>
-                            <ActivityIndicator />
+                            <ActivityIndicator/>
                         </View>
                     ) : (
                         <View style={styles.bodyWrap}>
@@ -286,7 +302,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
 
                     <Text style={styles.label}>Марка</Text>
                     <SelectList
-                        items={brands.map((b) => ({ id: b.id, name: b.name }))}
+                        items={brands.map((b) => ({id: b.id, name: b.name}))}
                         selectedId={brandId}
                         onSelect={(id) => setBrandId(Number(id))}
                         placeholder="Выберите марку"
@@ -321,7 +337,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                                         style={[
                                             styles.colorDot,
                                             active && styles.colorDotActive,
-                                            { backgroundColor: c.hex_code },
+                                            {backgroundColor: c.hex_code},
                                         ]}
                                     />
                                     <Text style={styles.colorName} numberOfLines={1}>
@@ -334,7 +350,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
 
                     <Text style={styles.label}>Город</Text>
                     <SelectList
-                        items={cities.map((c) => ({ id: c.id, name: c.name }))}
+                        items={cities.map((c) => ({id: c.id, name: c.name}))}
                         selectedId={cityId}
                         onSelect={(id) => setCityId(Number(id))}
                         placeholder="Выберите город"
@@ -346,7 +362,7 @@ const EditProfileModal: React.FC<Props> = ({ visible, onClose }) => {
                         <TouchableOpacity
                             disabled={saving}
                             onPress={onSave}
-                            style={[styles.primaryButton, saving && { opacity: 0.6 }]}
+                            style={[styles.primaryButton, saving && {opacity: 0.6}]}
                         >
                             <Text style={styles.primaryButtonText}>
                                 {saving ? 'СОХРАНЯЕМ…' : 'СОХРАНИТЬ'}

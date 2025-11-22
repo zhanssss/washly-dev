@@ -4,7 +4,7 @@ const base = {
     owner: "washly",
     slug: "washly-car-wash-app",
     version: "1.0.2",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: "washly",
     userInterfaceStyle: "automatic",

@@ -11,9 +11,9 @@ import {
     Alert,
 } from 'react-native';
 import {Star, MapPin, Clock, Calendar} from 'lucide-react-native';
-import { cancelDriverBooking } from '@/src/services/api/bookingsApi';
+import {cancelDriverBooking} from '@/src/services/api/bookingsApi';
 
-import {styles} from '@/components/Dashboards/CarOwnerDashboard/CarOwnerDashboard.styles';
+import {styles} from "./BookingModal.style"
 import {colors} from '@/assets/Theme/colors';
 import placeholderWash from '@/assets/images/placeholders/carwash_placeholder.jpg';
 
@@ -149,7 +149,6 @@ export default function BookingModal({
         if (!Number.isFinite(car_body)) return Alert.alert('Ошибка', 'Не выбран тип кузова.');
 
 
-
         const payload: CreateBookingPayload = {
             car_wash: Number(selectedWash.id),
             box: Number(selectedBoxId),
@@ -209,7 +208,7 @@ export default function BookingModal({
             if (oldId) {
                 await cancelDriverBooking(oldId);
             }
-            const payload = { ...lastPayloadRef.current };
+            const payload = {...lastPayloadRef.current};
             delete (payload as any).replace_existing;
             await createBooking(payload, accessToken);
             setReplaceVisible(false);
@@ -228,7 +227,6 @@ export default function BookingModal({
     };
 
 
-
     return (
         <Modal
             visible={visible}
@@ -236,276 +234,282 @@ export default function BookingModal({
             presentationStyle="pageSheet"
             onRequestClose={onClose}
         >
-            <View style={[styles.bookingModal, {paddingTop: insetsTop}]}>
-                {/* header */}
-                <View style={styles.bookingHeader}>
-                    <Text style={styles.bookingTitle}>ЗАПИСАТЬСЯ НА МОЙКУ</Text>
-                    <TouchableOpacity onPress={onClose} style={styles.bookingCloseButton}>
-                        <Text style={styles.closeButtonText}>✕</Text>
-                    </TouchableOpacity>
-                </View>
-
+            <View style={styles.bookingModal}>
                 {selectedWash && (
                     <ScrollView style={styles.bookingContent} showsVerticalScrollIndicator={false}>
-                        {/* шапка автомойки */}
-                        <View style={styles.bookingCarWashInfo}>
+                        <View style={styles.bookingHero}>
                             <Image
-                                source={selectedWash?.image ? { uri: selectedWash.image } : placeholderWash}
-                                style={styles.bookingCarWashImage}
+                                source={selectedWash?.image ? {uri: selectedWash.image} : placeholderWash}
+                                style={styles.bookingHeroImage}
+                                resizeMode="cover"
                             />
 
-                            <View style={styles.bookingCarWashDetails}>
-                                <Text style={styles.bookingCarWashName}>{selectedWash.name}</Text>
+                            {/* затемняющая подложка поверх картинки */}
+                            <View style={styles.bookingHeroOverlay}/>
+
+                            {/* крестик поверх картинки */}
+                            <TouchableOpacity onPress={onClose} style={styles.bookingCloseOnHero}>
+                                <Text style={styles.closeButtonText}>✕</Text>
+                            </TouchableOpacity>
+
+                            {/* текст поверх картинки */}
+                            <View style={styles.bookingHeroContent}>
+                                <Text style={styles.bookingHeroName}>{selectedWash.name}</Text>
 
                                 <View style={styles.bookingCarWashMeta}>
                                     <View style={styles.bookingRating}>
                                         <Star color="#FFD700" size={14} fill="#FFD700"/>
-                                        <Text style={styles.bookingRatingText}>{selectedWash.rating}</Text>
+                                        <Text style={styles.bookingHeroRatingText}>{selectedWash.rating}</Text>
                                     </View>
 
                                     <View style={styles.bookingLocation}>
-                                        <MapPin color="#888888" size={12}/>
-                                        <Text style={styles.bookingLocationText}>{selectedWash.address}</Text>
+                                        <MapPin color="#FFFFFFCC" size={12}/>
+                                        <Text style={styles.bookingHeroLocationText}>
+                                            {selectedWash.address}
+                                        </Text>
                                     </View>
                                 </View>
 
                                 {!!selectedWash.workingHours && (
                                     <View style={styles.bookingWorkingHours}>
                                         <Clock color="#FF6B35" size={14}/>
-                                        <Text
-                                            style={styles.bookingWorkingHoursText}>{selectedWash.workingHours}</Text>
+                                        <Text style={styles.bookingHeroHoursText}>
+                                            {selectedWash.workingHours}
+                                        </Text>
                                     </View>
                                 )}
                             </View>
                         </View>
 
-                        {/* Слоты */}
-                        <View style={styles.slotsSection}>
-                            <Text style={styles.slotsSectionTitle}>ДОСТУПНЫЕ СЛОТЫ</Text>
-                            <Text style={styles.slotsSectionSubtitle}>
-                                {washDetail
-                                    ? `Слот: ${washDetail.slotMinutes} мин • Буфер: ${washDetail.bufferMinutes} мин`
-                                    : ''}
-                            </Text>
-                            {boxes.length > 0 && (
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false}
-                                            style={{marginVertical: 8}}>
-                                    {boxes.map((b) => (
-                                        <TouchableOpacity
-                                            key={b.id}
-                                            style={[
-                                                styles.serviceItem,
-                                                selectedBoxId === b.id && styles.serviceItemSelected,
-                                            ]}
-                                            onPress={async () => {
-                                                setSelectedBoxId(b.id);
-                                                await onReloadSlots(Number(selectedWash.id), b.id, bookingDate);
-                                            }}
-                                        >
-                                            <Text style={styles.serviceText}>{b.name}</Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            )}
-
-                            {/* сетка слотов */}
-                            {loadingSlots ? (
-                                <ActivityIndicator/>
-                            ) : !boxSlots || boxSlots.items.length === 0 ? (
-                                <Text style={{color: colors.mutedText, marginTop: 8}}>
-                                    Нет слотов на выбранную дату
-                                </Text>
-                            ) : (
-                                <View style={styles.slotsGrid}>
-                                    {boxSlots.items.map((r) => {
-                                        const nowMs = Date.now();
-                                        const startMs = new Date(r.starts_at).getTime();
-                                        const endMs = new Date(r.ends_at).getTime();
-                                        const hasStarted = nowMs >= startMs;  // слот уже начался
-                                        const isPast = nowMs >= endMs;        // слот уже закончился
-                                        const available = r.status === 'free' && !hasStarted;
-                                        return (
-                                            <TouchableOpacity
-                                                key={r.slot_index}
-                                                style={[
-                                                    styles.slotCard,
-                                                    !available && styles.slotCardDisabled,
-                                                    selectedSlot?.id === String(r.slot_index) && styles.slotCardSelected,
-
-                                                ]}
-                                                onPress={() =>
-                                                    available &&
-                                                    setSelectedSlot({
-                                                        id: String(r.slot_index),
-                                                        time: toHHMM(r.starts_at), // только HH:mm в Asia/Almaty
-                                                        price: 0,
-                                                        available: true,
-                                                        starts_at: r.starts_at,
-                                                        ends_at: r.ends_at,
-                                                        slot_index: r.slot_index,
-                                                    } as any)
-
-                                                }
-                                                disabled={!available}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.slotTime,
-                                                        !available && styles.slotTimeDisabled,
-                                                        selectedSlot?.id === String(r.slot_index) && styles.slotTimeSelected,
-                                                    ]}
-                                                >
-                                                    {toHHMM(r.starts_at)}
-                                                </Text>
-
-                                                {!available && (
-                                                    <View
-                                                        style={[
-                                                            styles.slotUnavailableBadge,
-                                                            isPast
-                                                                ? { backgroundColor: '#cccccc' }      // прошло
-                                                                : r.status === 'booked'
-                                                                    ? { backgroundColor: '#ff6b6b' }    // занято
-                                                                    : { backgroundColor: '#ffd166' }    // идет / hold
-                                                        ]}
-                                                    >
-                                                        <Text style={styles.slotUnavailableText}>
-                                                            {isPast ? 'ПРОШЛО' : r.status === 'booked' ? 'ЗАНЯТО' : hasStarted ? 'ИДЕТ' : 'HOLD'}
-                                                        </Text>
-                                                    </View>
-                                                )}
-
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Услуги */}
-                        <View style={styles.servicesSection}>
-                            <Text style={styles.servicesSectionTitle}>УСЛУГИ</Text>
-                            <Text style={styles.servicesSectionSubtitle}>
-                                Основная услуга рассчитывается по типу кузова.
-                            </Text>
-
-                            {/* Базовая услуга по кузову */}
-                            <View style={styles.serviceCategorySection}>
-                                <Text style={styles.serviceCategoryTitle}>МОЙКА КУЗОВА</Text>
-
-                                {!washDetail ? (
-                                    <Text style={{color: colors.mutedText}}>Загрузка…</Text>
-                                ) : washDetail.bodyPrices.length === 0 ? (
-                                    <Text style={{color: colors.mutedText}}>Нет цен по кузовам</Text>
-                                ) : (
-                                    <View style={{gap: 8}}>
-                                        {washDetail.bodyPrices.map((bp) => {
-                                            const selected = bp.bodyId === selectedBodyId;
-                                            return (
-                                                <TouchableOpacity
-                                                    key={bp.bodyId}
-                                                    style={[styles.serviceItem, selected && styles.serviceItemSelected]}
-                                                    onPress={() => setSelectedBodyId(bp.bodyId)}
-                                                >
-                                                    <View style={styles.serviceMainInfo}>
-                                                        <View style={styles.serviceHeader}>
-                                                            <Text style={styles.serviceIcon}>🚗</Text>
-                                                            <View style={styles.serviceInfo}>
-                                                                <Text
-                                                                    style={[styles.serviceText, selected && styles.serviceTextSelected]}
-                                                                >
-                                                                    {bp.bodyName}
-                                                                </Text>
-                                                                <Text style={styles.serviceDescription}>
-                                                                    Базовая мойка кузова для данного типа
-                                                                </Text>
-                                                            </View>
-                                                        </View>
-                                                        <View style={styles.servicePriceContainer}>
-                                                            <Text
-                                                                style={[styles.servicePrice, selected && styles.servicePriceSelected]}
-                                                            >
-                                                                {bp.price.toLocaleString()} ₸
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                    <View
-                                                        style={[styles.serviceCheckbox, selected && styles.serviceCheckboxSelected]}
-                                                    >
-                                                        {selected && <View style={styles.serviceCheckboxInner}/>}
-                                                    </View>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </View>
-                                )}
-                            </View>
-
-                            {/* Дополнительные услуги */}
-                            <View style={styles.serviceCategorySection}>
-                                <Text style={styles.serviceCategoryTitle}>ДОПОЛНИТЕЛЬНО</Text>
-
-                                {!washDetail ? (
-                                    <Text style={{color: colors.mutedText}}>Загрузка…</Text>
-                                ) : washDetail.extraServices.length === 0 ? (
-                                    <Text style={{color: colors.mutedText}}>Нет дополнительных услуг</Text>
-                                ) : (
-                                    <View style={styles.servicesList}>
-                                        {washDetail.extraServices.map((es) => {
-                                            const selected = selectedExtras.includes(es.id);
-                                            return (
-                                                <TouchableOpacity
-                                                    key={es.id}
-                                                    style={[styles.serviceItem, selected && styles.serviceItemSelected]}
-                                                    onPress={() => toggleExtra(es.id)}
-                                                >
-                                                    <View style={styles.serviceMainInfo}>
-                                                        <View style={styles.serviceHeader}>
-                                                            <Text style={styles.serviceIcon}>➕</Text>
-                                                            <View style={styles.serviceInfo}>
-                                                                <Text
-                                                                    style={[styles.serviceText, selected && styles.serviceTextSelected]}
-                                                                >
-                                                                    {es.name}
-                                                                </Text>
-                                                                <Text style={styles.serviceDescription}>Дополнительная
-                                                                    услуга</Text>
-                                                            </View>
-                                                        </View>
-                                                        <View style={styles.servicePriceContainer}>
-                                                            <Text
-                                                                style={[styles.servicePrice, selected && styles.servicePriceSelected]}
-                                                            >
-                                                                {es.price.toLocaleString()} ₸
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                    <View
-                                                        style={[styles.serviceCheckbox, selected && styles.serviceCheckboxSelected]}
-                                                    >
-                                                        {selected && <View style={styles.serviceCheckboxInner}/>}
-                                                    </View>
-                                                </TouchableOpacity>
-                                            );
-                                        })}
-                                    </View>
-                                )}
-                            </View>
-
-                            {/* Итого */}
-                            <View style={styles.totalPriceSection}>
-                                <View style={styles.totalPriceContainer}>
-                                    <Text style={styles.totalPriceLabel}>ИТОГО:</Text>
-                                    <Text style={styles.totalPriceValue}>
-                                        {calculateTotalPrice().toLocaleString()} ₸
-                                    </Text>
-                                </View>
-                                <Text style={styles.totalPriceSubtext}>
-                                    База: {getBasePrice().toLocaleString()} ₸
-                                    {selectedExtras.length > 0
-                                        ? ` • Допы: ${getExtrasTotal().toLocaleString()} ₸`
+                        <View style={styles.bookingBody}>
+                            {/* Слоты */}
+                            <View style={styles.slotsSection}>
+                                <Text style={styles.slotsSectionTitle}>ДОСТУПНЫЕ СЛОТЫ</Text>
+                                <Text style={styles.slotsSectionSubtitle}>
+                                    {washDetail
+                                        ? `Слот: ${washDetail.slotMinutes} мин • Буфер: ${washDetail.bufferMinutes} мин`
                                         : ''}
                                 </Text>
+                                {boxes.length > 0 && (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                                                style={{marginVertical: 8}}>
+                                        {boxes.map((b) => (
+                                            <TouchableOpacity
+                                                key={b.id}
+                                                style={[
+                                                    styles.serviceItem,
+                                                    selectedBoxId === b.id && styles.serviceItemSelected,
+                                                ]}
+                                                onPress={async () => {
+                                                    setSelectedBoxId(b.id);
+                                                    await onReloadSlots(Number(selectedWash.id), b.id, bookingDate);
+                                                }}
+                                            >
+                                                <Text style={styles.serviceText}>{b.name}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                )}
+
+                                {/* сетка слотов */}
+                                {loadingSlots ? (
+                                    <ActivityIndicator/>
+                                ) : !boxSlots || boxSlots.items.length === 0 ? (
+                                    <Text style={{color: colors.mutedText, marginTop: 8}}>
+                                        Нет слотов на выбранную дату
+                                    </Text>
+                                ) : (
+                                    <View style={styles.slotsGrid}>
+                                        {boxSlots.items.map((r) => {
+                                            const nowMs = Date.now();
+                                            const startMs = new Date(r.starts_at).getTime();
+                                            const endMs = new Date(r.ends_at).getTime();
+                                            const hasStarted = nowMs >= startMs;  // слот уже начался
+                                            const isPast = nowMs >= endMs;        // слот уже закончился
+                                            const available = r.status === 'free' && !hasStarted;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={r.slot_index}
+                                                    style={[
+                                                        styles.slotCard,
+                                                        !available && styles.slotCardDisabled,
+                                                        selectedSlot?.id === String(r.slot_index) && styles.slotCardSelected,
+
+                                                    ]}
+                                                    onPress={() =>
+                                                        available &&
+                                                        setSelectedSlot({
+                                                            id: String(r.slot_index),
+                                                            time: toHHMM(r.starts_at), // только HH:mm в Asia/Almaty
+                                                            price: 0,
+                                                            available: true,
+                                                            starts_at: r.starts_at,
+                                                            ends_at: r.ends_at,
+                                                            slot_index: r.slot_index,
+                                                        } as any)
+
+                                                    }
+                                                    disabled={!available}
+                                                >
+                                                    <Text
+                                                        style={[
+                                                            styles.slotTime,
+                                                            !available && styles.slotTimeDisabled,
+                                                            selectedSlot?.id === String(r.slot_index) && styles.slotTimeSelected,
+                                                        ]}
+                                                    >
+                                                        {toHHMM(r.starts_at)}
+                                                    </Text>
+
+                                                    {!available && (
+                                                        <View
+                                                            style={[
+                                                                styles.slotUnavailableBadge,
+                                                                isPast
+                                                                    ? {backgroundColor: '#cccccc'}      // прошло
+                                                                    : r.status === 'booked'
+                                                                        ? {backgroundColor: '#ff6b6b'}    // занято
+                                                                        : {backgroundColor: '#ffd166'}    // идет / hold
+                                                            ]}
+                                                        >
+                                                            <Text style={styles.slotUnavailableText}>
+                                                                {isPast ? 'ПРОШЛО' : r.status === 'booked' ? 'ЗАНЯТО' : hasStarted ? 'ИДЕТ' : 'HOLD'}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Услуги */}
+                            <View style={styles.servicesSection}>
+                                <Text style={styles.servicesSectionTitle}>УСЛУГИ</Text>
+                                <Text style={styles.servicesSectionSubtitle}>
+                                    Основная услуга рассчитывается по типу кузова.
+                                </Text>
+
+                                {/* Базовая услуга по кузову */}
+                                <View style={styles.serviceCategorySection}>
+                                    <Text style={styles.serviceCategoryTitle}>МОЙКА КУЗОВА</Text>
+
+                                    {!washDetail ? (
+                                        <Text style={{color: colors.mutedText}}>Загрузка…</Text>
+                                    ) : washDetail.bodyPrices.length === 0 ? (
+                                        <Text style={{color: colors.mutedText}}>Нет цен по кузовам</Text>
+                                    ) : (
+                                        <View style={{gap: 8}}>
+                                            {washDetail.bodyPrices.map((bp) => {
+                                                const selected = bp.bodyId === selectedBodyId;
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={bp.bodyId}
+                                                        style={[styles.serviceItem, selected && styles.serviceItemSelected]}
+                                                        onPress={() => setSelectedBodyId(bp.bodyId)}
+                                                    >
+                                                        <View style={styles.serviceMainInfo}>
+                                                            <View style={styles.serviceHeader}>
+                                                                <Text style={styles.serviceIcon}>🚗</Text>
+                                                                <View style={styles.serviceInfo}>
+                                                                    <Text
+                                                                        style={[styles.serviceText, selected && styles.serviceTextSelected]}
+                                                                    >
+                                                                        {bp.bodyName}
+                                                                    </Text>
+                                                                    <Text style={styles.serviceDescription}>
+                                                                        Базовая мойка кузова для данного типа
+                                                                    </Text>
+                                                                </View>
+                                                            </View>
+                                                            <View style={styles.servicePriceContainer}>
+                                                                <Text
+                                                                    style={[styles.servicePrice, selected && styles.servicePriceSelected]}
+                                                                >
+                                                                    {bp.price.toLocaleString()} ₸
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        <View
+                                                            style={[styles.serviceCheckbox, selected && styles.serviceCheckboxSelected]}
+                                                        >
+                                                            {selected && <View style={styles.serviceCheckboxInner}/>}
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* Дополнительные услуги */}
+                                <View style={styles.serviceCategorySection}>
+                                    <Text style={styles.serviceCategoryTitle}>ДОПОЛНИТЕЛЬНО</Text>
+
+                                    {!washDetail ? (
+                                        <Text style={{color: colors.mutedText}}>Загрузка…</Text>
+                                    ) : washDetail.extraServices.length === 0 ? (
+                                        <Text style={{color: colors.mutedText}}>Нет дополнительных услуг</Text>
+                                    ) : (
+                                        <View style={styles.servicesList}>
+                                            {washDetail.extraServices.map((es) => {
+                                                const selected = selectedExtras.includes(es.id);
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={es.id}
+                                                        style={[styles.serviceItem, selected && styles.serviceItemSelected]}
+                                                        onPress={() => toggleExtra(es.id)}
+                                                    >
+                                                        <View style={styles.serviceMainInfo}>
+                                                            <View style={styles.serviceHeader}>
+                                                                <Text style={styles.serviceIcon}>➕</Text>
+                                                                <View style={styles.serviceInfo}>
+                                                                    <Text
+                                                                        style={[styles.serviceText, selected && styles.serviceTextSelected]}
+                                                                    >
+                                                                        {es.name}
+                                                                    </Text>
+                                                                    <Text style={styles.serviceDescription}>Дополнительная
+                                                                        услуга</Text>
+                                                                </View>
+                                                            </View>
+                                                            <View style={styles.servicePriceContainer}>
+                                                                <Text
+                                                                    style={[styles.servicePrice, selected && styles.servicePriceSelected]}
+                                                                >
+                                                                    {es.price.toLocaleString()} ₸
+                                                                </Text>
+                                                            </View>
+                                                        </View>
+                                                        <View
+                                                            style={[styles.serviceCheckbox, selected && styles.serviceCheckboxSelected]}
+                                                        >
+                                                            {selected && <View style={styles.serviceCheckboxInner}/>}
+                                                        </View>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* Итого */}
+                                <View style={styles.totalPriceSection}>
+                                    <View style={styles.totalPriceContainer}>
+                                        <Text style={styles.totalPriceLabel}>ИТОГО:</Text>
+                                        <Text style={styles.totalPriceValue}>
+                                            {calculateTotalPrice().toLocaleString()} ₸
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.totalPriceSubtext}>
+                                        База: {getBasePrice().toLocaleString()} ₸
+                                        {selectedExtras.length > 0
+                                            ? ` • Допы: ${getExtrasTotal().toLocaleString()} ₸`
+                                            : ''}
+                                    </Text>
+                                </View>
                             </View>
                         </View>
                     </ScrollView>

@@ -96,32 +96,23 @@ export const styles = StyleSheet.create({
     ctaTextDisabled: {color: '#555'},
 
     muted: {color: colors.mutedText},
-    // --- каталог автомоек ---
+
     listItem: {
-        backgroundColor: '#fff',
-        padding: 14,
-        marginHorizontal: 16,
-        marginVertical: 8,
-        borderRadius: 12,
-        shadowColor: '#000',
-        shadowOpacity: 0.05,
-        shadowOffset: {width: 0, height: 2},
-        shadowRadius: 4,
-        elevation: 2,
+        paddingHorizontal: 16,
+        marginBottom: 12,
     },
     listName: {
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '700',
-        color: colors.textDark,
+        color: '#FFFFFF',
     },
     listAddress: {
         fontSize: 12,
-        color: colors.mutedText,
-        marginTop: 2,
+        color: '#F2F2F2',
+        marginTop: 4,
     },
 
-    // --- панель бронирования ---
-// --- модалка брони ---
+    // --- панель бронирования --- //
     bookingModal: {
         flex: 1,
         backgroundColor: '#fff',
@@ -481,6 +472,27 @@ export const styles = StyleSheet.create({
     },
     catChipTextActive: {
         color: '#FF6B35',
+    },
+
+
+    listItemBg: {
+        height: 120,
+        borderRadius: 16,
+        overflow: 'hidden',
+        justifyContent: 'flex-end',
+    },
+
+    listItemBgImage: {
+        borderRadius: 16,
+    },
+
+    listItemOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+
+    listItemContent: {
+        padding: 12,
     },
 
 

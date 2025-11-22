@@ -126,4 +126,21 @@ export const styles = StyleSheet.create({
         color: colors.background,
         textAlign: 'center',
     },
+    label: {
+        fontSize: 16,
+        fontWeight: '600' as const,
+        color: colors.text,
+        marginBottom: 2,
+    },
+    input: {
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        fontSize: 18,
+        color: colors.text,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+
 });

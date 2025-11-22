@@ -179,50 +179,20 @@ export default function AuthScreen() {
     // ====== Сброс пароля (без изменений) ======
 
     const handleSendResetCode = async () => {
+        if (!phone || phone.length < 18) {
+            Alert.alert('Ошибка', 'Введите корректный номер телефона');
+            return;
+        }
+
         const apiPhone = normalizePhone(phone);
         setIsLoading(true);
         try {
             const res = await sendPasswordResetCode(apiPhone);
             if (res.success) {
-                setResetStep('verify-code');
                 Alert.alert('Код отправлен', res.message || 'Проверьте SMS');
+                router.push('/verification');
             } else {
                 Alert.alert('Ошибка', res.error || 'Не удалось отправить код');
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleVerifyResetCode = async () => {
-        if (resetCode.length !== 4) return Alert.alert('Ошибка', 'Введите 4-значный код');
-        const apiPhone = normalizePhone(phone);
-        setIsLoading(true);
-        try {
-            const res = await verifyPasswordResetCode(apiPhone, resetCode);
-            if (res.success) {
-                setResetStep('new-password');
-            } else {
-                Alert.alert('Ошибка', res.error || 'Неверный код');
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleResetPassword = async () => {
-        if (newPassword.length < 6) return Alert.alert('Ошибка', 'Пароль минимум 6 символов');
-        if (newPassword !== confirmPassword) return Alert.alert('Ошибка', 'Пароли не совпадают');
-
-        setIsLoading(true);
-        try {
-            const res = await resetPassword('', newPassword);
-            if (res.success) {
-                Alert.alert('Готово', res.message || 'Пароль сброшен. Войдите с новым паролем.', [
-                    {text: 'OK', onPress: handleBackToLogin}
-                ]);
-            } else {
-                Alert.alert('Ошибка', res.error || 'Не удалось изменить пароль');
             }
         } finally {
             setIsLoading(false);
@@ -245,17 +215,24 @@ export default function AuthScreen() {
             } else {
                 const next = loginAttempts + 1;
                 setLoginAttempts(next);
+
+                const errMsg = 'Неверный телефон или пароль';
+
                 if (next >= 3) {
                     Alert.alert('Неверный пароль', 'Хотите сбросить пароль?', [
-                        {text: 'Отмена', style: 'cancel'},
+                        { text: 'Отмена', style: 'cancel' },
                         {
-                            text: 'Сбросить пароль', onPress: () => {
+                            text: 'Сбросить пароль',
+                            onPress: () => {
                                 setStep('reset-password');
                                 setResetStep('send-code');
                                 setLoginAttempts(0);
-                            }
-                        }
+                            },
+                        },
                     ]);
+                } else {
+                    // ⚠️ warning сразу при неправильном пароле
+                    Alert.alert('Ошибка входа', errMsg);
                 }
             }
         } catch {
@@ -303,107 +280,6 @@ export default function AuthScreen() {
                 </SafeAreaView>
             );
         }
-        if (resetStep === 'verify-code') {
-            return (
-                <SafeAreaView style={styles.container}>
-                    <DismissKeyboard>
-                        <KeyboardAvoidingView style={styles.content}
-                                              behavior={'height'}>
-                            <View style={styles.header}>
-                                <View style={styles.iconContainer}><Lock color="#fff" size={32}/></View>
-                                <Text style={styles.title}>ВВЕДИТЕ КОД</Text>
-                                <Text style={styles.description}>Введите 4-значный код, отправленный{'\n'}на
-                                    номер {phone}</Text>
-                            </View>
-                            <View style={styles.form}>
-                                <Text style={styles.label}>Код подтверждения</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={resetCode}
-                                    onChangeText={setResetCode}
-                                    placeholder="0000"
-                                    placeholderTextColor="#666666"
-                                    keyboardType="number-pad"
-                                    maxLength={4}
-                                />
-                                <TouchableOpacity
-                                    style={[styles.button, (resetCode.length !== 4 || isLoading) && styles.buttonDisabled]}
-                                    onPress={handleVerifyResetCode}
-                                    disabled={resetCode.length !== 4 || isLoading}
-                                >
-                                    <Text style={styles.buttonText}>{isLoading ? 'ПРОВЕРКА...' : 'ПОДТВЕРДИТЬ'}</Text>
-                                    <ArrowRight color="#000000" size={20}/>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={styles.footer}>
-                                <TouchableOpacity style={styles.resendButton} onPress={handleSendResetCode}
-                                                  disabled={isLoading}>
-                                    <Text style={styles.resendButtonText}>Отправить код повторно</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.backButton} onPress={handleBackToLogin}
-                                                  disabled={isLoading}>
-                                    <Text style={styles.backButtonText}>Вернуться к входу</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </KeyboardAvoidingView>
-                    </DismissKeyboard>
-                    <BackButton visible={showBack} onPress={goBackStep}/>
-                </SafeAreaView>
-            );
-        }
-        if (resetStep === 'new-password') {
-            return (
-                <SafeAreaView style={styles.container}>
-                    <DismissKeyboard>
-                        <KeyboardAvoidingView style={styles.content}
-                                              behavior={'height'}>
-                            <View style={styles.header}>
-                                <View style={styles.iconContainer}><Lock color="#fff" size={32}/></View>
-                                <Text style={styles.title}>НОВЫЙ ПАРОЛЬ</Text>
-                                <Text style={styles.description}>Создайте новый пароль для входа{'\n'}в ваш
-                                    аккаунт</Text>
-                            </View>
-                            <View style={styles.form}>
-                                <Text style={styles.label}>Новый пароль</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={newPassword}
-                                    onChangeText={setNewPassword}
-                                    placeholder="Минимум 6 символов"
-                                    placeholderTextColor="#666666"
-                                    secureTextEntry
-                                />
-                                <Text style={styles.label}>Подтвердите пароль</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={confirmPassword}
-                                    onChangeText={setConfirmPassword}
-                                    placeholder="Повторите пароль"
-                                    placeholderTextColor="#666666"
-                                    secureTextEntry
-                                />
-                                <TouchableOpacity
-                                    style={[styles.button, (newPassword.length < 6 || newPassword !== confirmPassword || isLoading) && styles.buttonDisabled]}
-                                    onPress={handleResetPassword}
-                                    disabled={newPassword.length < 6 || newPassword !== confirmPassword || isLoading}
-                                >
-                                    <Text
-                                        style={styles.buttonText}>{isLoading ? 'СОХРАНЕНИЕ...' : 'СОХРАНИТЬ ПАРОЛЬ'}</Text>
-                                    <ArrowRight color="#000000" size={20}/>
-                                </TouchableOpacity>
-                            </View>
-                            <View style={styles.footer}>
-                                <TouchableOpacity style={styles.backButton} onPress={handleBackToLogin}
-                                                  disabled={isLoading}>
-                                    <Text style={styles.backButtonText}>Вернуться к входу</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </KeyboardAvoidingView>
-                    </DismissKeyboard>
-                    <BackButton visible={showBack} onPress={goBackStep}/>
-                </SafeAreaView>
-            );
-        }
     }
 
     // Экран выбора типа аккаунта
@@ -414,7 +290,6 @@ export default function AuthScreen() {
                     <View style={styles.header}>
                         <View style={styles.iconContainer}><User color="#14213D" size={56}/></View>
                         <Text style={styles.title}>Добро пожаловать!</Text>
-                        <Text style={styles.subtitle}>Выберите тип аккаунта</Text>
                     </View>
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity
@@ -432,7 +307,7 @@ export default function AuthScreen() {
                             disabled={isLoading}
                         >
                             <Waves color="#14213D" size={24}/>
-                            <Text style={styles.secondaryButtonText}>Я ПАРТЕНР</Text>
+                            <Text style={styles.secondaryButtonText}>Я ПАРТНЕР</Text>
                             {/*<Text style={styles.buttonSubtext}>Хочу больше клиентов</Text>*/}
                         </TouchableOpacity>
                     </View>

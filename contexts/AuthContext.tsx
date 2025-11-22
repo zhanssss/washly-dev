@@ -18,6 +18,7 @@ import {
     loadAccessToken,
 } from '@/src/auth/token';
 
+
 export interface CarDetails {
     ownerName: string;
     licensePlate: string;
@@ -71,7 +72,7 @@ export interface User {
     city?: number | null;
     color?: number | null;
     car_model?: string;
-
+    photo?: string | null;
     carDetails?: CarDetails;
     carWashDetails?: CarWashDetails;
 }
@@ -128,6 +129,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [pendingPhone, setPendingPhone] = useState<string>('');
+    const [verificationPurpose, setVerificationPurpose] = useState<'auth' | 'reset-password'>('auth');
     const [userType, setUserType] = useState<'car-owner' | 'car-wash'>('car-owner');
     const [showCode, setShowCode] = useState<boolean>(false);
     const [needsCarDetails, setNeedsCarDetails] = useState<boolean>(false);
@@ -137,10 +139,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const [tempPhone, setTempPhone] = useState<string>('');
     const [tempCarBody, setTempCarBody] = useState<string>('');
 
-    const [tempPassword, setTempPassword] = useState<string>(''); // временно сохраняем пароль
-    const [tempName, setTempName] = useState<string>('');        // имя пользователя
-    const [tempCarNumber, setTempCarNumber] = useState<string>(''); // гос номер машины
-    const [tempCarMark, setTempCarMark] = useState<string>('');     // марка машины
+    const [tempPassword, setTempPassword] = useState<string>('');
+    const [tempName, setTempName] = useState<string>('');
+    const [tempCarNumber, setTempCarNumber] = useState<string>('');
+    const [tempCarMark, setTempCarMark] = useState<string>('');
 
     const saveTempName = useCallback((name: string) => {
         setTempName(name);
@@ -176,6 +178,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const { setAuthUser: setAuthUserStore, setClientMe, clearClientMe } = useAuthStore.getState();
 
     // AuthContext.tsx — общий помощник для навешивания интерсепторов на любой инстанс
+
 
 
 
@@ -299,6 +302,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }
 
     function attachAuthInterceptors(instance: typeof api) {
+        const AUTH_SKIP_URLS = [
+            '/auth/token/',
+            '/auth/otp/request/',
+            '/auth/otp/verify/',
+            '/carwash/password/reset/request/',
+            '/carwash/password/reset/verify/',
+            '/carwash/password/reset/complete/',
+        ];
+
         const reqId = instance.interceptors.request.use(async (cfg) => {
             try {
                 if (!accessInMemory || isExpiring(accessExpMs)) {
@@ -317,8 +329,22 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             r => r,
             async (error) => {
                 const original = error?.config ?? {};
-                if (error?.response?.status !== 401 || (original as any)._retried) throw error;
+                const url = String(original.url || '');
+
+                // ⚠️ Для auth/парольных ручек не пытаемся рефрешить, просто отдаём ошибку наверх
+                if (
+                    AUTH_SKIP_URLS.some(p => url.includes(p)) ||
+                    url.includes('/auth/token/refresh/')
+                ) {
+                    throw error;
+                }
+
+                if (error?.response?.status !== 401 || (original as any)._retried) {
+                    throw error;
+                }
+
                 (original as any)._retried = true;
+
                 try {
                     const t = await ensureFreshAccess();
                     (original as any).headers = (original as any).headers ?? {};
@@ -341,6 +367,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         };
     }
 
+
     useEffect(() => {
         const ejectApi = attachAuthInterceptors(api);
         const ejectDashboard = attachAuthInterceptors(dashboardApi);
@@ -353,15 +380,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         };
     }, [saveTokens, clearTokens]);
 
-
-
-
-
-// Отправка кода (регистрация/вход по SMS)
+    // Отправка кода (регистрация/вход по SMS)
     const sendVerificationCode = useCallback(async (phone: string) => {
         try {
             const resp = await api.post('/auth/otp/request/', {phone});
             if (resp.data?.message) {
+                setVerificationPurpose('auth');
                 setPendingPhone(phone);
                 setShowCode(true);
                 setAuthStep('code');
@@ -479,7 +503,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         city: me.city ?? null,
         color: me.color ?? null,
         car_model: me.car_model ?? '',
-
+        photo: me.photo ?? null,
         // совместимость со старым UI
         carDetails: {
             ownerName: '',
@@ -586,23 +610,24 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     // Вход с паролем
     const loginWithPassword = useCallback(async (phone: string, password: string) => {
         try {
-            const response = await api.post('/auth/token/', {phone, password});
+            const response = await api.post('/auth/token/', { phone, password });
 
-            // токены приходят в body (или подстрахуемся заголовками)
-            let {access, refresh} = response.data ?? {};
+            let { access, refresh } = response.data ?? {};
+
+            // если вдруг старый бэк шлёт в заголовках — можешь оставить этот блок
             if (!access || !refresh) {
                 access = access ?? response.headers?.['access'] ?? response.headers?.['access-token'];
                 refresh = refresh ?? response.headers?.['refresh'] ?? response.headers?.['refresh-token'];
             }
+
             if (!access || !refresh) {
-                return {success: false, error: 'Токены не получены'};
+                return { success: false, error: 'Токены не получены' };
             }
 
             await saveTokens(access, refresh);
 
-            // пробуем сначала по выбранной роли (userType), потом фолбэк
-            const tryFetch = async (kind: 'car-owner' | 'car-wash') => {
-                if (kind === 'car-owner') {
+            if (userType === 'car-owner') {
+                try {
                     const meResp = await api.get(CLIENT_ME_URL);
                     const mapped = mapOwnerMeToUser(meResp.data);
                     setUser(mapped);
@@ -612,8 +637,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     setAuthStep('complete');
                     router.replace('/car-owner');
                     return { success: true, user: mapped };
-
-                } else {
+                } catch (e) {
+                    await clearTokens();
+                    return { success: false, error: 'Не удалось получить профиль владельца авто' };
+                }
+            } else {
+                // userType === 'car-wash'
+                try {
                     const meResp = await api.get(WASHER_ME_URL);
                     const mapped = mapWasherMeToUser(meResp.data);
                     setUser(mapped);
@@ -623,34 +653,44 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     setAuthStep('complete');
                     router.replace('/car-wash');
                     return { success: true, user: mapped };
-
-                }
-            };
-            const first = userType === 'car-wash' ? 'car-wash' : 'car-owner';
-            const second = first === 'car-wash' ? 'car-owner' : 'car-wash';
-
-            try {
-                return await tryFetch(first);
-            } catch (e1) {
-                try {
-                    return await tryFetch(second);
-                } catch (e2) {
-                    // если оба не сработали — чистим токены
+                } catch (e) {
                     await clearTokens();
-                    return {success: false, error: 'Не удалось получить профиль'};
+                    return { success: false, error: 'Не удалось получить профиль автомойки' };
                 }
             }
         } catch (error) {
-            console.log('Error logging in with password:', error);
-            return {success: false, error: 'Ошибка входа'};
+        console.log('Error logging in with password:', error);
+
+        if (axios.isAxiosError(error)) {
+            const data = error.response?.data as any;
+            const detail = data?.detail || data?.error;
+
+            // если 401 — считаем, что логин/пароль неправильные
+            if (error.response?.status === 401) {
+                return {
+                    success: false,
+                    error: detail || 'Неверный телефон или пароль',
+                };
+            }
+
+            return {
+                success: false,
+                error: detail || 'Ошибка входа',
+            };
         }
-    }, [userType, saveTokens, clearTokens]);
+
+        return { success: false, error: 'Ошибка входа' };
+    }
+
+}, [userType, saveTokens, clearTokens]);
+
 
 // 1) REQUEST: POST /api/carwash/password/reset/request/
     const sendPasswordResetCode = useCallback(async (phone: string) => {
         try {
             const res = await api.post('/carwash/password/reset/request/', {phone});
-            // backend returns { message, debug_code }
+            setVerificationPurpose('reset-password');
+            setPendingPhone(phone);
             return {
                 success: true,
                 message: res?.data?.message ?? '',
@@ -733,6 +773,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         resetPassword,
         logout,
         pendingPhone,
+        verificationPurpose,
         showCode,
         needsCarDetails,
         needsCarWashDetails,
@@ -769,6 +810,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         resetPassword,
         logout,
         pendingPhone,
+        verificationPurpose,
         showCode,
         needsCarDetails,
         needsCarWashDetails,
